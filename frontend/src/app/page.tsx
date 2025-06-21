@@ -244,36 +244,29 @@ export default function Home() {
   };
 
   const handleSubmit = async () => {
-    const contributingCauses = selectedPerpetuations.includes("none")
-      ? ["none"]
-      : perpetuations
-          .filter((p) => selectedPerpetuations.includes(String(p.id)))
-          .map((p) => p.text);
-
-    const finalSolutions = Object.entries(solutions).map(([id, action]) => {
-      const item = actionableItems.find(item => item.id === id);
-      return {
-        item: item ? item.cause : 'Unknown',
-        action: action
-      };
-    });
+    const filteredCauses = causes.filter(
+      (c) => c.cause.trim() !== "" || (c.assumption && c.assumption.trim() !== "")
+    );
 
     const sessionData = {
       pain_point: painPoint,
-      causes: causes.filter(
-        (c) => c.cause.trim() !== "" || c.assumption.trim() !== ""
-      ),
+      causes: filteredCauses.map((c) => c.cause),
+      assumptions: filteredCauses.map((c) => c.assumption || ""),
       perpetuations: perpetuations
         .map((p) => p.text)
         .filter((perpetuation) => perpetuation.trim() !== ""),
-      solutions: finalSolutions,
-      fears: Object.values(fears),
-      action_plan: actionPlan.selectedActionId === 'other'
-        ? actionPlan.otherActionText
-        : actionPlan.selectedActionId
-        ? `${Object.entries(solutions).find(([id]) => id === actionPlan.selectedActionId)?.[1] || ''}: ${actionPlan.elaborationTexts[actionPlan.selectedActionId] || ''}`
-        : '',
-      contributing_causes: contributingCauses,
+      solutions: Object.values(solutions).filter((solution) => solution.trim() !== ""),
+      fears: Object.values(fears).filter(
+        (fear) => fear.name.trim() !== "" || fear.mitigation.trim() !== "" || fear.contingency.trim() !== ""
+      ),
+      action_plan:
+        actionPlan.selectedActionId === "other"
+          ? actionPlan.otherActionText
+          : actionPlan.selectedActionId
+          ? `${
+              solutions[actionPlan.selectedActionId] || ""
+            }: ${actionPlan.elaborationTexts[actionPlan.selectedActionId] || ""}`
+          : "",
     };
 
     try {
@@ -332,7 +325,7 @@ export default function Home() {
                     onChange={(e) => setPainPoint(e.target.value)}
                     onInput={(e) => autoResizeTextarea(e.currentTarget)}
                     className="auto-resizing-textarea"
-                    placeholder="What problem are you trying to solve?"
+                    placeholder="What problem would you like to work through?"
                     disabled={step !== 0}
                   />
                 </div>
@@ -345,7 +338,7 @@ export default function Home() {
               onClick={startSession}
               disabled={!painPoint.trim()}
             >
-              Onward!
+              Begin
             </button>
           </div>
         </div>
@@ -359,13 +352,8 @@ export default function Home() {
           <div className="form-content">
             <div className="input-group">
               <label className="input-label">
-                We live in a causal universe. Meaning every effect has a cause
-                that precedes it. Your problem is the effect, list up to five
-                causal factors that you think could be contributing to it. For
-                each causal factor, consider if it is verifiably true or if it
-                is an assumption you might be making. If you think it may be an
-                assumption, describe it. An assumption is something believed to
-                be true without evidence.
+                <p>We live in a causal universe. Every effect has a cause that precedes it. Your problem is the effect.</p>
+                <p>List up to five causes that you think could be contributing to your problem. For each cause, consider if it is verifiably true or if it is an assumption you might be making. If you think it may be an assumption, write it down. An assumption is something believed to be true without evidence.</p>
               </label>
               <div
                 className="causes-container"
@@ -374,7 +362,7 @@ export default function Home() {
                   <div key={index} className="deletable-item-container">
                     <div className="cause-assumption-pair">
                       <div className="cause-column">
-                        <label className="item-label">Causal Factor</label>
+                        <label className="item-label">Contributing Cause</label>
                         <textarea
                           value={item.cause}
                           onChange={(e) =>
@@ -386,7 +374,7 @@ export default function Home() {
                         />
                       </div>
                       <div className="assumption-column">
-                        <label className="item-label">Assumption</label>
+                        <label className="item-label">Potential Assumption</label>
                         <textarea
                           value={item.assumption}
                           onChange={(e) =>
@@ -538,7 +526,7 @@ export default function Home() {
                 to your problem.
               </h1>
               <p className="step-description">
-                Our problems rarely exist completely outside of ourselves. We nearly always have a role to play. Try your best to be honest.
+                Our problems rarely exist completely outside of ourselves. We often have a role to play. Try your best to be honest about yours.
               </p>
               <div className="form-content">
                 <div className="items-container">
@@ -602,7 +590,7 @@ export default function Home() {
           <div className="form-content">
             <div className="input-group">
               <label className="input-label">
-                Select the causal factors you think would be useful to address. Consider your assumptions, then outline a potential action you can take to begin addressing it.
+                Select the contributing cause that you think would be useful to address. Consider the assumptions you might be making, then outline a potential action you can take to begin addressing it.
               </label>
               <div className="items-container">
                 {actionableItems.map((item) => (
@@ -610,17 +598,17 @@ export default function Home() {
                     <div
                       className={`selectable-box ${
                         solutions[item.id] !== undefined ? "selected" : ""
-                      }`}
+                      } ${item.assumption ? "cause-assumption-box" : ""}`}
                       onClick={() => handleSolutionSelection(item.id)}
                     >
                       {item.assumption ? (
                         <div className="cause-assumption-pair">
                           <div className="cause-column">
-                            <label className="item-label">Causal Factor</label>
+                            <label className="item-label">Contributing Cause</label>
                             <div className="item-text">{item.cause}</div>
                           </div>
                           <div className="assumption-column">
-                            <label className="item-label">Assumption</label>
+                            <label className="item-label">Potential Assumption</label>
                             <div className="item-text">{item.assumption}</div>
                           </div>
                         </div>
@@ -719,7 +707,7 @@ export default function Home() {
                       </div>
                       <div>
                         <label className="input-label">
-                          What action can you take to try and prevent that from
+                          What action could you take to try and prevent that from
                           happening?
                         </label>
                         <textarea

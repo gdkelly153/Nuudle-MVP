@@ -346,6 +346,10 @@ flex-direction: column;
   border-color: #007bff;
 }
 
+.cause-assumption-box.selected {
+  border-color: transparent;
+}
+
 .selectable-box.selected-none {
   border-color: #dc3545;
 }
@@ -390,6 +394,26 @@ flex-direction: column;
 .selectable-box .assumption-column {
   flex-basis: 50%;
   max-width: 50%;
+}
+
+.cause-assumption-box {
+  border: 1px solid transparent;
+  padding: 0;
+}
+
+.cause-assumption-box .cause-assumption-pair {
+  padding: 0;
+}
+
+.cause-assumption-box .cause-column .item-text,
+.cause-assumption-box .assumption-column .item-text {
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+.cause-assumption-box.selected .cause-column .item-text,
+.cause-assumption-box.selected .assumption-column .item-text {
+  border-color: #007bff;
 }
 
 .fear-analysis-container {
