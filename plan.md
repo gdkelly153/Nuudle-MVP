@@ -1,56 +1,51 @@
-# Plan to Update the Nuudle Session Wizard
+### Plan: UI and Logic Updates
 
-This document outlines the plan to make two changes to the Nuudle session wizard in the Next.js application.
+1.  **Objective:** Implement styling, text, and logic changes based on user feedback across multiple steps of the wizard.
+2.  **Files to Modify:**
+    *   `frontend/src/app/page.tsx`
+    *   `frontend/src/app/globals.css`
 
-## Part 1: Text Change
+---
 
-The first change is a simple text update in the "What you can do about it?" step of the wizard.
+### Step 0: Initial Screen
 
-**File to Modify:** `frontend/src/app/page.tsx`
+*   **Spacing:** Add more space between "Nuudle" and "Question. Understand. Know.".
+    *   **Action:** In `frontend/src/app/globals.css`, I will add `margin-top: 1rem;` to the `.subheader` style definition.
+*   **Placeholder Text:** Center the placeholder text "What problem are you trying to solve?".
+    *   **Action:** In `frontend/src/app/globals.css`, I will add a new style to center the placeholder text for the `auto-resizing-textarea` class.
+*   **Button Text:** Change "Start Session" to "Onward!".
+    *   **Action:** In `frontend/src/app/page.tsx`, I will update the text inside the button.
 
-**Current Text:**
-```html
-List up to five potential actions you can take for the
-selected causal factor.
-```
+### Step 1: Causal Factors
 
-**New Text:**
-```html
-List up to five steps you can take to address the root cause you selected.
-```
+*   **Validation Logic:** Only require the *first* causal factor text box to be filled before the "Next" button is enabled. The assumption field will not be required.
+    *   **Action:** In `frontend/src/app/page.tsx`, I will modify the `disabled` logic for the "Next" button in this step.
 
-## Part 2: Flow Change
+### Step 5: Action Plan
 
-The second change is to modify the user flow of the wizard to allow users to go back from the "Fear Naming" step to the "What you can do about it?" step and be able to edit their answers.
+*   **Header Text:** Change "Stop Nuudling, Start Dooing." to "Stop Nuudling. Start Doodling.".
+    *   **Action:** In `frontend/src/app/page.tsx`, I will update the `h1` text.
+*   **Label Text:** Change "What's your next step?" to "The most important step is always the next one. What's yours?".
+    *   **Action:** In `frontend/src/app/page.tsx`, I will update the `label` text.
 
-**File to Modify:** `frontend/src/app/page.tsx`
+---
 
-**The Problem:**
-Currently, when a user clicks the "Back" button on the "Fear Naming" step (Step 3), they are taken back to the "What you can do about it?" step (Step 2), but the component is still in "selection mode." This prevents the user from editing their previous answers or adding new ones.
-
-**The Solution:**
-I will implement a new `handleBack` function that will be called when the "Back" button on the "Fear Naming" step is clicked. This function will:
-1.  Decrement the `step` state variable to navigate to the previous step.
-2.  Set the `promptForSolutionSelection` state variable to `false`.
-
-This will return the "What you can do about it?" step to its initial "input mode," allowing the user to freely edit their answers, add new ones, or select a different one to proceed with. No data will be lost in this process.
-
-### Flow Diagram
-
-Here is a Mermaid diagram illustrating the new flow:
+### Mermaid Diagram
 
 ```mermaid
 graph TD
-    subgraph "Step 2: What you can do about it?"
-        direction LR
-        InputMode["Input & Edit Mode<br/>(promptForSolutionSelection = false)"]
-        SelectMode["Selection Mode<br/>(promptForSolutionSelection = true)"]
-        InputMode --"Click 'Next'"--> SelectMode
-    end
-
-    subgraph "Step 3: Fear Naming"
-        FearNaming["Fear Naming Screen"]
-    end
-
-    SelectMode --"Select an Action"--> FearNaming
-    FearNaming --"Click 'Back' (New Logic)"--> InputMode
+    A[Start] --> B{Review Feedback};
+    B --> C{Plan Styling Changes};
+    C --> C1[Add margin to subheader];
+    C --> C2[Center placeholder text];
+    B --> D{Plan Text Changes};
+    D --> D1["Start Session" -> "Onward!"];
+    D --> D2["Stop Nuudling, Start Dooing." -> "Stop Nuudling. Start Doodling."];
+    D --> D3["What's your next step?" -> "The most important step..."];
+    B --> E{Plan Logic Changes};
+    E --> E1[Update Step 1 'Next' button validation];
+    C1 & C2 --> F{Update \`globals.css\`};
+    D1 & D2 & D3 & E1 --> G{Update \`page.tsx\`};
+    F & G --> H{Switch to Code Mode};
+    H --> I[Implement All Changes];
+    I --> J[End];
