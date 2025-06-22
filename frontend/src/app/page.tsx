@@ -1,6 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import {
+  NuudleModeActivator,
+  AIAssistButton,
+  AIResponseCard,
+  AIErrorCard,
+  SuggestedCause,
+  useAIAssistant,
+} from "@/components/AIComponents";
 
 interface ActionableItem {
   id: string;
@@ -27,6 +35,14 @@ export default function Home() {
     otherActionText: "",
     elaborationTexts: {},
   });
+
+  const [sessionId, setSessionId] = useState<string>("");
+  useEffect(() => {
+    // In a real app, you'd generate or fetch a unique session ID
+    setSessionId(`session_${Date.now()}`);
+  }, []);
+
+  const ai = useAIAssistant(sessionId);
 
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -330,6 +346,31 @@ export default function Home() {
                   />
                 </div>
               </div>
+              {!ai.isEnabled ? (
+                <NuudleModeActivator
+                  onActivate={() => ai.setIsEnabled(true)}
+                  disabled={!painPoint.trim()}
+                />
+              ) : (
+                <AIAssistButton
+                  stage="problem_articulation"
+                  isLoading={ai.isLoading}
+                  onRequest={() => ai.requestAssistance("problem_articulation", painPoint, { painPoint })}
+                  disabled={!painPoint.trim() || !ai.canUseAI}
+                  sessionId={sessionId}
+                  context={{ painPoint }}
+                />
+              )}
+              {ai.error && <AIErrorCard error={ai.error} onDismiss={ai.dismissResponse} />}
+              {ai.currentResponse && (
+                <AIResponseCard
+                  response={ai.currentResponse}
+                  stage="problem_articulation"
+                  onDismiss={ai.dismissResponse}
+                  onFeedback={ai.provideFeedback}
+                  canFollowUp={ai.canUseAI}
+                />
+              )}
             </div>
           </div>
           <div className="button-container">
@@ -403,6 +444,31 @@ export default function Home() {
                   </div>
                 ))}
               </div>
+              {!ai.isEnabled ? (
+                <NuudleModeActivator
+                  onActivate={() => ai.setIsEnabled(true)}
+                  disabled={causes.filter(c => c.cause.trim()).length === 0}
+                />
+              ) : (
+                <AIAssistButton
+                  stage="root_cause"
+                  isLoading={ai.isLoading}
+                  onRequest={() => ai.requestAssistance("root_cause", causes.map(c => c.cause).join(', '), { causes })}
+                  disabled={causes.filter(c => c.cause.trim()).length < 2 || !ai.canUseAI}
+                  sessionId={sessionId}
+                  context={{ causes }}
+                />
+              )}
+              {ai.error && <AIErrorCard error={ai.error} onDismiss={ai.dismissResponse} />}
+              {ai.currentResponse && (
+                <AIResponseCard
+                  response={ai.currentResponse}
+                  stage="root_cause"
+                  onDismiss={ai.dismissResponse}
+                  onFeedback={ai.provideFeedback}
+                  canFollowUp={ai.canUseAI}
+                />
+              )}
             </div>
           </div>
           <div className="button-container">
@@ -480,6 +546,31 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
+                {!ai.isEnabled ? (
+                  <NuudleModeActivator
+                    onActivate={() => ai.setIsEnabled(true)}
+                    disabled={perpetuations.filter(p => p.text.trim()).length === 0}
+                  />
+                ) : (
+                  <AIAssistButton
+                    stage="perpetuation"
+                    isLoading={ai.isLoading}
+                    onRequest={() => ai.requestAssistance("perpetuation", perpetuations.map(p => p.text).join(', '), { perpetuations })}
+                    disabled={perpetuations.filter(p => p.text.trim()).length === 0 || !ai.canUseAI}
+                    sessionId={sessionId}
+                    context={{ perpetuations }}
+                  />
+                )}
+                {ai.error && <AIErrorCard error={ai.error} onDismiss={ai.dismissResponse} />}
+                {ai.currentResponse && (
+                  <AIResponseCard
+                    response={ai.currentResponse}
+                    stage="perpetuation"
+                    onDismiss={ai.dismissResponse}
+                    onFeedback={ai.provideFeedback}
+                    canFollowUp={ai.canUseAI}
+                  />
+                )}
               </div>
               <div className="button-container">
                 <button type="button" onClick={prevStep} disabled={step !== 2}>
@@ -642,6 +733,31 @@ export default function Home() {
                 ))}
               </div>
             </div>
+            {!ai.isEnabled ? (
+              <NuudleModeActivator
+                onActivate={() => ai.setIsEnabled(true)}
+                disabled={actionableItems.length === 0}
+              />
+            ) : (
+              <AIAssistButton
+                stage="assumptions"
+                isLoading={ai.isLoading}
+                onRequest={() => ai.requestAssistance("assumptions", actionableItems.map(i => i.cause).join(', '), { actionableItems })}
+                disabled={actionableItems.length === 0 || !ai.canUseAI}
+                sessionId={sessionId}
+                context={{ actionableItems }}
+              />
+            )}
+            {ai.error && <AIErrorCard error={ai.error} onDismiss={ai.dismissResponse} />}
+            {ai.currentResponse && (
+              <AIResponseCard
+                response={ai.currentResponse}
+                stage="assumptions"
+                onDismiss={ai.dismissResponse}
+                onFeedback={ai.provideFeedback}
+                canFollowUp={ai.canUseAI}
+              />
+            )}
           </div>
           <div className="button-container">
             <button type="button" onClick={prevStep} disabled={step !== 3}>
@@ -740,6 +856,31 @@ export default function Home() {
                 </div>
               ))}
             </div>
+            {!ai.isEnabled ? (
+              <NuudleModeActivator
+                onActivate={() => ai.setIsEnabled(true)}
+                disabled={Object.keys(fears).length === 0}
+              />
+            ) : (
+              <AIAssistButton
+                stage="action_planning"
+                isLoading={ai.isLoading}
+                onRequest={() => ai.requestAssistance("action_planning", Object.values(solutions).join(', '), { solutions, fears })}
+                disabled={Object.keys(fears).length === 0 || !ai.canUseAI}
+                sessionId={sessionId}
+                context={{ solutions, fears }}
+              />
+            )}
+            {ai.error && <AIErrorCard error={ai.error} onDismiss={ai.dismissResponse} />}
+            {ai.currentResponse && (
+              <AIResponseCard
+                response={ai.currentResponse}
+                stage="action_planning"
+                onDismiss={ai.dismissResponse}
+                onFeedback={ai.provideFeedback}
+                canFollowUp={ai.canUseAI}
+              />
+            )}
           </div>
           <div className="button-container">
             <button type="button" onClick={prevStep} disabled={step !== 4}>

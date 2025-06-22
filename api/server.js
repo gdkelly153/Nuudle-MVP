@@ -1,93 +1,87 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import { config } from 'dotenv';
-import { RateLimiterMemory } from 'rate-limiter-flexible';
-import sqlite3 from 'sqlite3';
-import { getAssistance } from '../backend/services/aiService.js';
 
-config();
+// A function to start the server after all dependencies are loaded
+async function startServer() {
+  // --- 1. Load Environment Variables ---
+  // Use dynamic import to ensure dotenv runs first
+  const dotenv = await import('dotenv');
+  dotenv.config();
 
-const app = express();
-const port = process.env.PORT || 3001;
+  // --- 2. Dynamically Import Services ---
+  // These modules depend on the environment variables being loaded
+  const { default: dbService } = await import('./services/databaseService.js');
+  const { getResponse } = await import('./services/aiService.js');
 
-// Database setup
-const db = new sqlite3.Database('./usage.db', (err) => {
-  if (err) {
-    console.error(err.message);
-  }
-  console.log('Connected to the usage database.');
-});
+  // --- 3. Initialize Express App ---
+  const app = express();
+  const port = process.env.PORT || 3001;
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS api_usage (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    stage TEXT,
-    tokens_used INTEGER
-  )
-`);
+  // --- 4. Setup Middleware ---
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+  app.use(cors());
+  app.use(helmet());
 
-// Rate limiter setup
-const rateLimiter = new RateLimiterMemory({
-  points: 10, // 10 requests
-  duration: 60, // per 60 seconds
-});
+  // --- 5. Define Routes ---
+  app.get('/', (req, res) => {
+    res.send('Hello from the Nuudle API server!');
+  });
 
-const rateLimiterMiddleware = (req, res, next) => {
-  rateLimiter.consume(req.ip)
-    .then(() => {
-      next();
-    })
-    .catch(() => {
-      res.status(429).send('Too Many Requests');
-    });
-};
+  app.post('/api/ai/assist', async (req, res) => {
+    const { userId = 'default-user', sessionId, stage, userInput, sessionContext } = req.body;
+    if (!sessionId || !stage || !userInput || !sessionContext) {
+      return res.status(400).json({ error: 'sessionId, stage, userInput, and sessionContext are required.' });
+    }
+    try {
+      await dbService.createSession(sessionId, userId);
+      const result = await getResponse(userId, sessionId, stage, userInput, sessionContext);
+      const statusCode = result.success ? 200 : (result.error.includes('Rate limit') ? 429 : 500);
+      res.status(statusCode).json(result);
+    } catch (error) {
+      res.status(500).json({ success: false, error: 'Internal Server Error' });
+    }
+  });
 
-// Body parsing middleware should be first
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+  app.get('/api/ai/usage/:sessionId', async (req, res) => {
+    const { sessionId } = req.params;
+    const userId = req.query.userId || 'default-user';
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID is required.' });
+    }
+    try {
+      const usage = await dbService.checkRateLimits(userId, sessionId);
+      res.status(200).json(usage);
+    } catch (error) {
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
 
-app.use(cors());
-app.use(helmet());
+  app.post('/api/ai/feedback', async (req, res) => {
+    const { sessionId, interactionId, helpful } = req.body;
+    if (!sessionId || !interactionId || typeof helpful !== 'boolean') {
+      return res.status(400).json({ error: 'sessionId, interactionId, and a boolean `helpful` value are required.' });
+    }
+    try {
+      await dbService.logFeedback(sessionId, interactionId, helpful);
+      res.status(200).json({ success: true, message: 'Feedback received.' });
+    } catch (error) {
+      res.status(500).json({ success: false, error: 'Internal Server Error' });
+    }
+  });
 
-app.get('/', (req, res) => {
-  res.send('Hello from the API server!');
-});
+  // --- 6. Initialize Database and Start Server ---
+  await dbService.initialize();
+  app.listen(port, () => {
+    console.log(`Server is running on http://localhost:${port}`);
+  });
 
-app.get('/api/test', (req, res) => {
-  res.send('Test route is working!');
-});
+  return app;
+}
 
-console.log('Registering /api/ai/assist route...');
-app.post('/api/ai/assist', rateLimiterMiddleware, async (req, res) => {
-  const { stage, context } = req.body;
+// Start the server
+const appPromise = startServer();
 
-  if (!stage || !context) {
-    return res.status(400).json({ error: 'Stage and context are required.' });
-  }
-
-  try {
-    const { question, tokens_used } = await getAssistance(stage, context);
-
-    // Log usage to the database
-    db.run(
-      'INSERT INTO api_usage (stage, tokens_used) VALUES (?, ?)',
-      [stage, tokens_used],
-      (err) => {
-        if (err) {
-          console.error('Error logging API usage:', err.message);
-        }
-      }
-    );
-
-    res.json({ question });
-  } catch (error) {
-    console.error('Error getting assistance:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
-});
+// Export the promise for testing purposes
+export default appPromise;

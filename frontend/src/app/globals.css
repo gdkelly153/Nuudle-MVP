@@ -427,3 +427,73 @@ flex-direction: column;
   border: 1px solid #eee;
   border-radius: 5px;
 }
+
+/* AI-related elements */
+:root {
+  --ai-primary: #3B82F6;      /* Blue - trustworthy, helpful */
+  --ai-secondary: #EFF6FF;    /* Light blue - subtle background */
+  --ai-accent: #1D4ED8;       /* Darker blue - active states */
+  --ai-muted: #9CA3AF;        /* Grey - disabled/optional states */
+}
+
+/* AI responses use softer, more conversational typography */
+.ai-response {
+  font-family: sans-serif;
+  font-weight: 400;
+  line-height: 1.6;
+  font-size: 0.95rem; /* Slightly smaller than main content */
+}
+
+.ai-button {
+  font-weight: 500;
+  font-size: 0.875rem;
+  text-transform: none; /* More conversational, less commanding */
+}
+
+/* Smooth, non-jarring animations */
+.ai-card-enter {
+  animation: slideInFromTop 0.3s ease-out;
+  transform-origin: top;
+}
+
+.ai-button-loading {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Hover states that feel supportive, not pushy */
+.ai-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+@keyframes slideInFromTop {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
