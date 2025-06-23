@@ -2,7 +2,10 @@
 // File: frontend/src/components/AIComponents.tsx
 
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronUp, MessageCircle, Loader2, AlertCircle, CheckCircle, X } from 'lucide-react';
+import Tooltip from '@/components/Tooltip';
+import { ChevronDown, ChevronUp, Brain, Loader2, AlertCircle, CheckCircle, X } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // Types
 interface AIUsage {
@@ -19,27 +22,56 @@ interface AIResponse {
 }
 
 interface AIComponentProps {
-  stage: 'problem_articulation' | 'root_cause' | 'assumptions' | 'perpetuation' | 'action_planning';
+  stage: 'problem_articulation' | 'root_cause' | 'identify_assumptions' | 'suggest_causes' | 'perpetuation' | 'action_planning';
   sessionId: string;
   context: any;
   onResponse?: (response: string) => void;
 }
 
 // AI Activation Button
-export const NuudleModeActivator: React.FC<{
-  onActivate: () => void;
+interface HelpMeNuudleButtonProps {
+  onClick: () => void;
   disabled: boolean;
-}> = ({ onActivate, disabled }) => {
+  isLoading: boolean;
+}
+
+export const HelpMeNuudleButton: React.FC<HelpMeNuudleButtonProps> = ({ onClick, disabled, isLoading }) => {
   return (
-    <div className="text-center mt-4">
+    <Tooltip text="Attempt the prompt to utilize me." isDisabled={disabled || isLoading}>
       <button
-        onClick={onActivate}
-        disabled={disabled}
-        className="text-sm text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+        onClick={onClick}
+        disabled={disabled || isLoading}
+        className="button landing-button"
+        style={{ position: 'relative' }}
       >
-        Activate Nuudle Mode
+        {isLoading ? (
+          <>
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            Nuudling...
+          </>
+        ) : (
+          'Help Me Nuudle'
+        )}
+        <div style={{
+          position: 'absolute',
+          top: '-14px',
+          left: '-14px',
+          width: '32px',
+          height: '32px',
+          pointerEvents: 'none',
+          zIndex: 20
+        }}>
+          <Brain style={{ width: '100%', height: '100%' }} className="text-blue-400" />
+          <div className="neural-network-brain">
+            <div className="light-particle"></div>
+            <div className="light-particle"></div>
+            <div className="light-particle"></div>
+            <div className="light-particle"></div>
+            <div className="light-particle"></div>
+          </div>
+        </div>
       </button>
-    </div>
+    </Tooltip>
   );
 };
 
@@ -50,54 +82,71 @@ export const AIAssistButton: React.FC<AIComponentProps & {
   disabled: boolean;
 }> = ({ stage, isLoading, onRequest, disabled }) => {
   const buttonText = {
-    problem_articulation: 'Get clarifying questions',
-    root_cause: 'Suggest overlooked causes',
-    assumptions: 'Help identify assumptions', 
-    perpetuation: 'Reflect on patterns',
-    action_planning: 'Process concerns'
+    problem_articulation: 'Help me articulate my problem',
+    root_cause: 'Help me discover overlooked causes',
+    identify_assumptions: 'Help me identify assumptions',
+    suggest_causes: 'Help me with potential actions',
+    perpetuation: 'Help me think of more ways I could contribute to the problem',
+    action_planning: 'Help me process my concerns'
   };
 
   const descriptions = {
-    problem_articulation: 'AI will ask questions to help you articulate your problem more clearly',
-    root_cause: 'AI will suggest additional root causes you might consider',
-    assumptions: 'AI will help identify assumptions you might be making',
-    perpetuation: 'AI will help you see patterns in how you might be contributing to the problem',
-    action_planning: 'AI will help you reality-test your concerns and strengthen your plans'
+    problem_articulation: 'AI will ask questions to help you articulate your problem more clearly.',
+    root_cause: 'AI will suggest additional root causes you might have overlooked.',
+    identify_assumptions: 'AI will help you identify potential assumptions in your stated causes.',
+    suggest_causes: 'AI will suggest additional causes for you to consider.',
+    perpetuation: 'AI will help you brainstorm different ways you might be contributing to the problem.',
+    action_planning: 'AI will help you reality-test your concerns and strengthen your plans.'
   };
 
   return (
-    <div className="mt-3">
-      <button
-        onClick={onRequest}
-        disabled={disabled || isLoading}
-        className={`
-          inline-flex items-center px-4 py-2 text-sm font-medium rounded-md transition-all duration-200
-          ${disabled 
-            ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-            : isLoading
-              ? 'bg-blue-100 text-blue-600 cursor-wait'
-              : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md hover:-translate-y-0.5'
-          }
-        `}
-        aria-describedby={`ai-help-description-${stage}`}
-      >
-        {isLoading ? (
-          <>
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            AI is thinking...
-          </>
-        ) : (
-          <>
-            <MessageCircle className="w-4 h-4 mr-2" />
-            {buttonText[stage]}
-          </>
+    <Tooltip text="Attempt the prompt to utilize me." isDisabled={disabled || isLoading}>
+      <div className="ai-button-wrapper" style={{ position: 'relative' }}>
+        <button
+          onClick={onRequest}
+          disabled={disabled || isLoading}
+          className={`
+            ai-assist-button inline-flex items-center rounded-md transition-all duration-200
+            ${disabled
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : isLoading
+                ? 'bg-blue-100 text-blue-600 cursor-wait'
+                : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md hover:-translate-y-0.5'
+            }
+          `}
+          aria-describedby={`ai-help-description-${stage}`}
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              <span>Nuudling...</span>
+            </>
+          ) : (
+            <span>{buttonText[stage]}</span>
+          )}
+        </button>
+        {!isLoading && (
+          <div style={{
+            position: 'absolute',
+            top: '-8px',
+            left: '-8px',
+            width: '16px',
+            height: '16px',
+            pointerEvents: 'none',
+            zIndex: 20,
+          }}>
+            <Brain style={{ width: '100%', height: '100%' }} className="text-blue-300" />
+            <div className="neural-network-brain" style={{ transform: 'scale(0.5)', transformOrigin: 'top left' }}>
+              <div className="light-particle"></div>
+              <div className="light-particle"></div>
+              <div className="light-particle"></div>
+              <div className="light-particle"></div>
+              <div className="light-particle"></div>
+            </div>
+          </div>
         )}
-      </button>
-      
-      <div id={`ai-help-description-${stage}`} className="sr-only">
-        {descriptions[stage]}
       </div>
-    </div>
+    </Tooltip>
   );
 };
 
@@ -134,9 +183,9 @@ export const AIResponseCard: React.FC<{
     >
       {/* Header */}
       <div className="flex items-center justify-between p-3 bg-blue-100">
-        <div className="flex items-center space-x-2">
-          <MessageCircle className="w-4 h-4 text-blue-600" />
-          <span className="text-sm font-medium text-blue-900">AI Coach Suggestion</span>
+        <div className="flex items-baseline space-x-2">
+          <Brain className="w-4 h-4 text-blue-600" />
+          <span className="text-sm font-medium text-blue-900">Nuudle AI Suggestion</span>
         </div>
         
         <div className="flex items-center space-x-1">
@@ -161,8 +210,10 @@ export const AIResponseCard: React.FC<{
       {/* Content */}
       {isExpanded && (
         <div className="p-4">
-          <div className="text-gray-800 text-sm leading-relaxed mb-4">
-            {response}
+          <div className="prose prose-sm max-w-none text-gray-800 leading-relaxed mb-4">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {response}
+            </ReactMarkdown>
           </div>
           
           {/* Actions */}
@@ -308,17 +359,18 @@ export const useAIAssistant = (sessionId: string) => {
     sessionRequests: 0,
     sessionLimit: 5
   });
-  const [isEnabled, setIsEnabled] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [currentResponse, setCurrentResponse] = useState<{ response: string; interactionId: number } | null>(null);
+  const [isEnabled, setIsEnabled] = useState(true);
+  const [loadingStage, setLoadingStage] = useState<string | null>(null);
+  const [responses, setResponses] = useState<{ [stage: string]: { response: string; interactionId: number } | null }>({});
+  const [activeStage, setActiveStage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch usage on mount and when isEnabled changes
+  // Fetch usage on mount
   useEffect(() => {
-    if (sessionId && isEnabled) {
+    if (sessionId) {
       fetchUsage();
     }
-  }, [sessionId, isEnabled]);
+  }, [sessionId]);
 
   const fetchUsage = async () => {
     if (!sessionId) return;
@@ -336,11 +388,11 @@ export const useAIAssistant = (sessionId: string) => {
   };
 
   const requestAssistance = async (stage: string, userInput: string, context: any) => {
-    if (!isEnabled || !sessionId || usage.dailyRequests >= usage.dailyLimit || usage.sessionRequests >= usage.sessionLimit) {
+    if (!sessionId || usage.dailyRequests >= usage.dailyLimit || usage.sessionRequests >= usage.sessionLimit) {
       return;
     }
 
-    setIsLoading(true);
+    setLoadingStage(stage);
     setError(null);
     
     try {
@@ -360,7 +412,8 @@ export const useAIAssistant = (sessionId: string) => {
 
       const data = await response.json();
       if (response.ok) {
-        setCurrentResponse({ response: data.response, interactionId: data.interactionId });
+        setResponses(prev => ({ ...prev, [stage]: { response: data.response, interactionId: data.interactionId } }));
+        setActiveStage(stage);
         setUsage(data.usage);
       } else {
         setError(data.error || 'AI assistance temporarily unavailable');
@@ -368,17 +421,17 @@ export const useAIAssistant = (sessionId: string) => {
     } catch (error) {
       setError('Failed to connect to AI service. Please check your internet connection.');
     } finally {
-      setIsLoading(false);
+      setLoadingStage(null);
     }
   };
 
   const dismissResponse = () => {
-    setCurrentResponse(null);
+    setActiveStage(null);
     setError(null);
   };
 
   const provideFeedback = async (helpful: boolean) => {
-    if (!currentResponse) return;
+    if (!activeStage || !responses[activeStage]) return;
     try {
       await fetch('/api/ai/feedback', {
         method: 'POST',
@@ -387,7 +440,7 @@ export const useAIAssistant = (sessionId: string) => {
         },
         body: JSON.stringify({
           sessionId,
-          interactionId: currentResponse.interactionId,
+          interactionId: responses[activeStage]?.interactionId,
           helpful
         })
       });
@@ -400,8 +453,8 @@ export const useAIAssistant = (sessionId: string) => {
     usage,
     isEnabled,
     setIsEnabled,
-    isLoading,
-    currentResponse: currentResponse?.response ?? null,
+    loadingStage,
+    currentResponse: activeStage ? responses[activeStage]?.response ?? null : null,
     error,
     requestAssistance,
     dismissResponse,

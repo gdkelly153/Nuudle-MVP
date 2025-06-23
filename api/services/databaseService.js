@@ -77,7 +77,7 @@ const dbService = {
     );
     return {
       sessionRequests: result.count,
-      sessionLimit: 5 // Hardcoded for now
+      sessionLimit: 1000 // Hardcoded for now
     };
   },
 
@@ -91,7 +91,7 @@ const dbService = {
     );
     return {
       dailyRequests: result.daily_requests || 0,
-      dailyLimit: 10, // Hardcoded for now
+      dailyLimit: 1000, // Hardcoded for now
       dailyCost: result.daily_cost || 0
     };
   },
