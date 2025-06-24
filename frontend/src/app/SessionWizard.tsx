@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import Tooltip from "@/components/Tooltip";
 import {
   HelpMeNuudleButton,
@@ -27,6 +27,7 @@ export default function SessionWizard() {
   const [step2Phase, setStep2Phase] = useState<"input" | "selection">("input");
   const [selectedPerpetuations, setSelectedPerpetuations] = useState<string[]>([]);
   const [fears, setFears] = useState<{ [id: string]: { name: string; mitigation: string; contingency: string } }>({});
+  const [openFearSections, setOpenFearSections] = useState<string[]>([]);
   const [notWorried, setNotWorried] = useState(false);
   const [suggestedCauses, setSuggestedCauses] = useState<string[]>([]);
   const [actionPlan, setActionPlan] = useState<{
@@ -38,11 +39,9 @@ export default function SessionWizard() {
     otherActionText: "",
     elaborationTexts: {},
   });
-  const [causeTextareaHeights, setCauseTextareaHeights] = useState<{ [key: number]: number }>({});
- 
-   const [sessionId, setSessionId] = useState<string>("");
-   useEffect(() => {
-     setSessionId(`session_${Date.now()}`);
+  const [sessionId, setSessionId] = useState<string>("");
+  useEffect(() => {
+    setSessionId(`session_${Date.now()}`);
   }, []);
 
   const ai = useAIAssistant(sessionId);
@@ -51,6 +50,12 @@ export default function SessionWizard() {
   const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
   const painPointTextareaRef = useRef<HTMLTextAreaElement>(null);
   const causeTextAreaRefs = useRef<Array<[HTMLTextAreaElement | null, HTMLTextAreaElement | null]>>([]);
+  const readOnlyCauseTextAreaRefs = useRef<Array<[HTMLTextAreaElement | null, HTMLTextAreaElement | null]>>([]);
+  const perpetuationsTextareaRefs = useRef<Array<HTMLTextAreaElement | null>>([]);
+  const solutionTextareaRefs = useRef<Map<string, HTMLTextAreaElement | null>>(new Map());
+  const fearTextareaRefs = useRef<Map<string, { name: HTMLTextAreaElement | null; mitigation: HTMLTextAreaElement | null; contingency: HTMLTextAreaElement | null; }>>(new Map());
+  const actionPlanTextareaRefs = useRef<Map<string, HTMLTextAreaElement | null>>(new Map());
+  const otherActionTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (stepRefs.current[step]) {
@@ -59,23 +64,38 @@ export default function SessionWizard() {
         block: "center",
       });
     }
-    if (step === 0 && painPointTextareaRef.current) {
-      setTimeout(() => {
-        if (painPointTextareaRef.current) {
-          syncTextareaHeights(painPointTextareaRef.current);
-        }
-      }, 0);
-    }
     ai.dismissResponse();
   }, [step]);
 
-  useEffect(() => {
-    causeTextAreaRefs.current.forEach(pair => {
-      if (pair[0] && pair[1]) {
-        syncTextareaHeights(pair[0], pair[1]);
+useLayoutEffect(() => {
+  const adjustTextareaHeight = (textarea: HTMLTextAreaElement) => {
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.max(textarea.scrollHeight,
+      parseFloat(getComputedStyle(textarea).minHeight))}px`;
+  };
+
+  const allTextareas = document.querySelectorAll('.auto-resizing-textarea');
+  allTextareas.forEach(textarea => {
+    adjustTextareaHeight(textarea as HTMLTextAreaElement);
+  });
+
+  // Sync cause and assumption textareas after individual adjustment
+  const syncPairs = (pairs: Array<[HTMLTextAreaElement | null, HTMLTextAreaElement | null]>) => {
+    pairs.forEach(pair => {
+      const [causeTextArea, assumptionTextArea] = pair;
+      if (causeTextArea && assumptionTextArea) {
+        const causeHeight = causeTextArea.clientHeight;
+        const assumptionHeight = assumptionTextArea.clientHeight;
+        const maxHeight = Math.max(causeHeight, assumptionHeight);
+        causeTextArea.style.height = `${maxHeight}px`;
+        assumptionTextArea.style.height = `${maxHeight}px`;
       }
     });
-  }, [causes]);
+  };
+
+  syncPairs(causeTextAreaRefs.current);
+  syncPairs(readOnlyCauseTextAreaRefs.current);
+}, [step, causes, perpetuations, solutions, fears, actionPlan, step2Phase, actionableItems]);
 
   useEffect(() => {
     if (step === 3) {
@@ -100,7 +120,7 @@ export default function SessionWizard() {
 
   useEffect(() => {
     if (notWorried) {
-      setFears({});
+      setOpenFearSections([]);
     }
   }, [notWorried]);
 
@@ -201,24 +221,25 @@ export default function SessionWizard() {
   };
 
   const handleFearSelection = (id: string) => {
-    setFears(prev => {
-      const newFears = { ...prev };
-      if (newFears[id]) {
-        delete newFears[id];
-      } else {
-        newFears[id] = { name: "", mitigation: "", contingency: "" };
+    setOpenFearSections(prev => {
+      const newOpenFears = prev.includes(id)
+        ? prev.filter(fearId => fearId !== id)
+        : [...prev, id];
+      
+      if (newOpenFears.includes(id) && !fears[id]) {
+        setFears(prevFears => ({
+          ...prevFears,
+          [id]: { name: "", mitigation: "", contingency: "" }
+        }));
       }
-      return newFears;
+      
+      return newOpenFears;
     });
     setNotWorried(false);
   };
 
   const removeFearAction = (id: string) => {
-    setFears(prev => {
-      const newFears = { ...prev };
-      delete newFears[id];
-      return newFears;
-    });
+    setOpenFearSections(prev => prev.filter(fearId => fearId !== id));
   };
 
   const handleFearChange = (
@@ -331,45 +352,39 @@ export default function SessionWizard() {
     }
   };
 
-  const syncTextareaHeights = (
-    element1: HTMLTextAreaElement,
-    element2?: HTMLTextAreaElement,
-    index?: number
-  ) => {
-    if (!element1) return;
- 
-    const autoResizeSingle = (el: HTMLTextAreaElement) => {
-      const style = window.getComputedStyle(el);
-      const minHeight = parseInt(style.minHeight, 10);
-      el.style.height = "auto";
-      const scrollHeight = el.scrollHeight;
-      el.style.height = `${Math.max(scrollHeight, minHeight)}px`;
-    };
- 
-    if (!element2) {
-      autoResizeSingle(element1);
-      return;
-    }
- 
-    const style1 = window.getComputedStyle(element1);
-    const minHeight1 = parseInt(style1.minHeight, 10);
-    element1.style.height = "auto";
-    const scrollHeight1 = element1.scrollHeight;
- 
-    const style2 = window.getComputedStyle(element2);
-    const minHeight2 = parseInt(style2.minHeight, 10);
-    element2.style.height = "auto";
-    const scrollHeight2 = element2.scrollHeight;
- 
-    const finalHeight = Math.max(scrollHeight1, minHeight1, scrollHeight2, minHeight2);
- 
-    element1.style.height = `${finalHeight}px`;
-    element2.style.height = `${finalHeight}px`;
 
-    if (index !== undefined) {
-      setCauseTextareaHeights(prev => ({ ...prev, [index]: finalHeight }));
+const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: number) => {
+  const textarea = e.currentTarget;
+
+  // For paired textareas, sync their heights
+  if (index !== undefined) {
+    const pair = causeTextAreaRefs.current[index];
+    if (pair) {
+      const [causeTextArea, assumptionTextArea] = pair;
+      if (causeTextArea && assumptionTextArea) {
+        // Reset both to auto to get their natural scrollHeight
+        causeTextArea.style.height = 'auto';
+        assumptionTextArea.style.height = 'auto';
+
+        const causeScrollHeight = causeTextArea.scrollHeight;
+        const assumptionScrollHeight = assumptionTextArea.scrollHeight;
+        
+        const maxHeight = Math.max(causeScrollHeight, assumptionScrollHeight);
+        
+        const minHeight = parseFloat(getComputedStyle(textarea).minHeight);
+        const finalHeight = `${Math.max(maxHeight, minHeight)}px`;
+
+        causeTextArea.style.height = finalHeight;
+        assumptionTextArea.style.height = finalHeight;
+        return; // Exit after handling paired textareas
+      }
     }
-  };
+  }
+
+  // Fallback for non-paired textareas
+  textarea.style.height = 'auto';
+  textarea.style.height = `${Math.max(textarea.scrollHeight, parseFloat(getComputedStyle(textarea).minHeight))}px`;
+};
 
   const getStepClass = (stepNumber: number) => {
     if (stepNumber === step) {
@@ -391,17 +406,17 @@ export default function SessionWizard() {
           <div className="form-content initial-form-content">
             <div className="input-group">
               <div className="items-container">
-                <div className="deletable-item-container">
-                  <textarea
-                    ref={painPointTextareaRef}
-                    value={painPoint}
-                    onChange={(e) => setPainPoint(e.target.value)}
-                    onInput={(e) => syncTextareaHeights(e.currentTarget)}
-                    className="auto-resizing-textarea"
-                    placeholder="What problem would you like to work through today?"
-                    disabled={step !== 0}
-                  />
-                </div>
+<div className="deletable-item-container">
+  <textarea
+    ref={painPointTextareaRef}
+    value={painPoint}
+    onChange={(e) => setPainPoint(e.target.value)}
+    onInput={(e) => syncTextareaHeights(e)}
+    className="auto-resizing-textarea"
+    placeholder="What problem would you like to work through today?"
+    disabled={step !== 0}
+  />
+</div>
               </div>
               <div className="button-container justify-start mt-2">
               </div>
@@ -440,9 +455,9 @@ export default function SessionWizard() {
             <div className="input-group">
               <label className="step-description">
                 <p>
-                  We live in a causal universe. Every effect has a cause that precedes it. Your problem is an effect.
+                  We live in a causal universe. Every effect has a cause that precedes it. Your problem is the effect.
                   <span style={{ display: 'block', textIndent: '1em' }}>
-                    List up to five causes that you think could be contributing to your problem. For each cause you identify, write down if there is a potential assumption you might be making. An assumption is something believed to be true without evidence and requires further inquiry to be considered a true cause.
+                    List up to five causes that you think could be contributing to the problem. For each cause that you identify, consider if there is a potential assumption that you might be making. An assumption is something believed to be true without evidence and requires validation through inquiry to be considered a true cause.
                   </span>
                 </p>
               </label>
@@ -454,43 +469,31 @@ export default function SessionWizard() {
                   return (
                     <div key={index} className="deletable-item-container">
                       <div className="cause-assumption-pair">
-                        <div className="cause-column">
-                          <label className="item-label">Contributing Cause</label>
+                        <div className="cause-column" style={{ alignItems: 'center' }}>
+                          <label className="item-label" style={{ display: 'block', marginBottom: '4px' }}>Contributing Cause</label>
                           <textarea
                             ref={(el) => {
                               causeTextAreaRefs.current[index][0] = el;
                             }}
                             value={item.cause}
                             onChange={(e) => handleCauseChange(index, "cause", e.target.value)}
-                            onInput={(e) =>
-                              syncTextareaHeights(
-                                e.currentTarget,
-                                causeTextAreaRefs.current[index][1] ?? undefined,
-                                index
-                              )
-                           }
-                           className="auto-resizing-textarea"
-                           disabled={step !== 1}
-                         />
-                       </div>
-                       <div className="assumption-column">
-                         <label className="item-label">Potential Assumption</label>
-                         <textarea
-                           ref={(el) => {
-                             causeTextAreaRefs.current[index][1] = el;
-                           }}
-                           value={item.assumption}
-                           onChange={(e) => handleCauseChange(index, "assumption", e.target.value)}
-                           onInput={(e) =>
-                             syncTextareaHeights(
-                               e.currentTarget,
-                               causeTextAreaRefs.current[index][0] ?? undefined,
-                               index
-                             )
-                           }
-                           className="auto-resizing-textarea"
-                           disabled={step !== 1}
-                         />
+                            onInput={(e) => syncTextareaHeights(e, index)}
+                            className="auto-resizing-textarea"
+                            disabled={step !== 1}
+                          />
+                        </div>
+                        <div className="assumption-column" style={{ alignItems: 'center' }}>
+                          <label className="item-label" style={{ display: 'block', marginBottom: '4px' }}>Potential Assumption</label>
+                          <textarea
+                            ref={(el) => {
+                              causeTextAreaRefs.current[index][1] = el;
+                            }}
+                            value={item.assumption || ""}
+                            onChange={(e) => handleCauseChange(index, "assumption", e.target.value)}
+                            onInput={(e) => syncTextareaHeights(e, index)}
+                            className="auto-resizing-textarea"
+                            disabled={step !== 1}
+                          />
                         </div>
                       </div>
                       {index > 0 && (
@@ -526,7 +529,7 @@ export default function SessionWizard() {
               </div>
             </div>
           </div>
-          <div className="button-container">
+          <div className="button-container" style={{ marginTop: '1rem' }}>
             <button type="button" onClick={prevStep} disabled={step !== 1}>
               Back
             </button>
@@ -562,12 +565,15 @@ export default function SessionWizard() {
               <div className="form-content">
                 <div className="input-group">
                   <div className="items-container">
-                    {perpetuations.map((perpetuation) => (
+                    {perpetuations.map((perpetuation, index) => (
                       <div key={perpetuation.id} className="deletable-item-container">
                         <textarea
+                          ref={el => {
+                            if (el) perpetuationsTextareaRefs.current[index] = el;
+                          }}
                           value={perpetuation.text}
                           onChange={(e) => handlePerpetuationChange(perpetuation.id, e.target.value)}
-                          onInput={(e) => syncTextareaHeights(e.currentTarget)}
+                          onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
                           disabled={step !== 2}
                         />
@@ -580,7 +586,7 @@ export default function SessionWizard() {
                     ))}
                   </div>
                 </div>
-                <div className="ai-button-container">
+                <div className="ai-button-container mt-2">
                   <AIAssistButton
                     stage="perpetuation"
                     isLoading={ai.loadingStage === 'perpetuation'}
@@ -591,7 +597,7 @@ export default function SessionWizard() {
                   />
                 </div>
               </div>
-              <div className="button-container">
+              <div className="button-container" style={{ marginTop: '1rem' }}>
                 <button type="button" onClick={prevStep} disabled={step !== 2}>
                   Back
                 </button>
@@ -628,7 +634,7 @@ export default function SessionWizard() {
           ) : (
             <>
               <h1>What's your role?</h1>
-              <p className="step-description">Our problems rarely exist completely outside of ourselves. We often have a role to play. Try your best to be honest about yours. Click every action that you think might already be contributing to your problem.</p>
+              <p className="step-description">Our problems rarely exist completely outside of ourselves. We often have a role to play. Try your best to be honest about yours. Click every action that you think might be actively contributing to the problem.</p>
               <div className="form-content">
                 <div className="items-container">
                   {perpetuations.map((perpetuation) => (
@@ -641,16 +647,21 @@ export default function SessionWizard() {
                       {perpetuation.text}
                     </div>
                   ))}
-                  <div
-                    className={`selectable-box ${selectedPerpetuations.includes("none") ? "selected-none" : ""}`}
-                    onClick={() => handlePerpetuationSelection("none")}
-                  >
-                    <span className="selection-indicator">{selectedPerpetuations.includes("none") && "✖"}</span>
-                    None of the above
+                  <div className="flex items-center mt-4">
+                    <input
+                      type="checkbox"
+                      id="none-of-the-above"
+                      checked={selectedPerpetuations.includes("none")}
+                      onChange={() => handlePerpetuationSelection("none")}
+                      className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 custom-checkbox"
+                    />
+                    <label htmlFor="none-of-the-above" className="ml-2 block text-sm text-gray-900">
+                      None of these are actively contributing to the problem
+                    </label>
                   </div>
                 </div>
               </div>
-              <div className="button-container">
+              <div className="button-container" style={{ marginTop: '1rem' }}>
                 <button type="button" onClick={() => setStep2Phase("input")} disabled={step !== 2}>
                   Back
                 </button>
@@ -670,11 +681,14 @@ export default function SessionWizard() {
           <div className="form-content">
             <div className="input-group">
               <label className="step-description">
-                For each contributing cause you identified, outline a potential action you can take to begin addressing it.
+                Select a contributing cause and outline a potential action you could take to address it.
               </label>
               <div className="items-container">
                 {actionableItems.filter(item => item.id.startsWith('cause')).map((item) => {
                   const index = parseInt(item.id.split('-')[1], 10);
+                  if (!readOnlyCauseTextAreaRefs.current[index]) {
+                    readOnlyCauseTextAreaRefs.current[index] = [null, null];
+                  }
                   return (
                     <div key={item.id} className="actionable-item-container">
                       <div
@@ -682,23 +696,23 @@ export default function SessionWizard() {
                         onClick={() => handleSolutionSelection(item.id)}
                       >
                         <div className="cause-assumption-pair">
-                          <div className="cause-column">
-                            <label className="item-label">Contributing Cause</label>
+                          <div className="cause-column" style={{ alignItems: 'center' }}>
+                            <label className="item-label" style={{ display: 'block', marginBottom: '4px' }}>Contributing Cause</label>
                             <textarea
+                              ref={(el) => { readOnlyCauseTextAreaRefs.current[index][0] = el; }}
                               value={item.cause}
                               readOnly={true}
                               className="auto-resizing-textarea read-only-textarea"
-                              style={{ height: causeTextareaHeights[index] ? `${causeTextareaHeights[index]}px` : 'auto' }}
                               rows={1}
                             />
                           </div>
-                          <div className="assumption-column">
-                            <label className="item-label">Potential Assumption</label>
+                          <div className="assumption-column" style={{ alignItems: 'center' }}>
+                            <label className="item-label" style={{ display: 'block', marginBottom: '4px' }}>Potential Assumption</label>
                             <textarea
+                              ref={(el) => { readOnlyCauseTextAreaRefs.current[index][1] = el; }}
                               value={item.assumption || ""}
                               readOnly={true}
                               className="auto-resizing-textarea read-only-textarea"
-                              style={{ height: causeTextareaHeights[index] ? `${causeTextareaHeights[index]}px` : 'auto' }}
                               rows={1}
                             />
                           </div>
@@ -707,9 +721,10 @@ export default function SessionWizard() {
                       {solutions[item.id] !== undefined && (
                         <div className="action-textarea-container">
                           <textarea
+                            ref={el => { solutionTextareaRefs.current.set(item.id, el); }}
                             value={solutions[item.id]}
                             onChange={(e) => handleSolutionActionChange(item.id, e.target.value)}
-                            onInput={(e) => syncTextareaHeights(e.currentTarget)}
+                            onInput={(e) => syncTextareaHeights(e)}
                             className="auto-resizing-textarea"
                             placeholder="Enter your action here"
                             disabled={step !== 3}
@@ -724,7 +739,7 @@ export default function SessionWizard() {
                 })}
                 {actionableItems.filter(item => item.id.startsWith('perp-')).length > 0 && (
                   <div className="mt-4">
-                    <label className="item-label">My Contributions</label>
+                    <label className="item-label" style={{ display: 'block', textAlign: 'center', marginBottom: '4px' }}>My Contributions</label>
                     {actionableItems.filter(item => item.id.startsWith('perp-')).map((item) => (
                       <div key={item.id} className="actionable-item-container">
                         <div
@@ -735,16 +750,17 @@ export default function SessionWizard() {
                             value={item.cause}
                             readOnly={true}
                             className="auto-resizing-textarea read-only-textarea"
-                            onInput={(e) => syncTextareaHeights(e.currentTarget)}
+                            onInput={(e) => syncTextareaHeights(e)}
                             rows={1}
                           />
                         </div>
                         {solutions[item.id] !== undefined && (
                           <div className="action-textarea-container">
                             <textarea
+                              ref={el => { solutionTextareaRefs.current.set(item.id, el); }}
                               value={solutions[item.id]}
                               onChange={(e) => handleSolutionActionChange(item.id, e.target.value)}
-                              onInput={(e) => syncTextareaHeights(e.currentTarget)}
+                              onInput={(e) => syncTextareaHeights(e)}
                               className="auto-resizing-textarea"
                               placeholder="Enter your action here"
                               disabled={step !== 3}
@@ -759,9 +775,7 @@ export default function SessionWizard() {
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-          <div className="ai-button-container">
+              <div className="ai-button-container mt-2">
             <AIAssistButton
               stage="suggest_causes"
               isLoading={ai.loadingStage === 'suggest_causes'}
@@ -771,7 +785,9 @@ export default function SessionWizard() {
               context={{ painPoint, causes }}
             />
           </div>
-          <div className="button-container">
+            </div>
+          </div>
+          <div className="button-container" style={{ marginTop: '1rem' }}>
             <button type="button" onClick={prevStep} disabled={step !== 3}>
               Back
             </button>
@@ -820,12 +836,12 @@ export default function SessionWizard() {
               {Object.entries(solutions).map(([id, action]) => (
                 <div key={id} className="actionable-item-container">
                   <div
-                    className={`selectable-box ${fears[id] !== undefined ? "selected" : ""}`}
+                    className={`selectable-box ${openFearSections.includes(id) ? "selected" : ""}`}
                     onClick={() => handleFearSelection(id)}
                   >
                     <div className="item-text">{action}</div>
                   </div>
-                  {fears[id] !== undefined && (
+                  {openFearSections.includes(id) && fears[id] && (
                     <div className="fear-analysis-container">
                       <button type="button" className="delete-item-button" onClick={() => removeFearAction(id)} disabled={step !== 4}>
                         &times;
@@ -833,9 +849,13 @@ export default function SessionWizard() {
                       <div>
                         <label className="input-label">If you take this action, what could go wrong?</label>
                         <textarea
-                          value={fears[id].name}
+                          ref={el => {
+                            const refs = fearTextareaRefs.current.get(id) || { name: null, mitigation: null, contingency: null };
+                            fearTextareaRefs.current.set(id, { ...refs, name: el });
+                          }}
+                          value={fears[id]?.name || ""}
                           onChange={(e) => handleFearChange(id, "name", e.target.value)}
-                          onInput={(e) => syncTextareaHeights(e.currentTarget)}
+                          onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
                           disabled={step !== 4}
                         />
@@ -843,9 +863,13 @@ export default function SessionWizard() {
                       <div>
                         <label className="input-label">What action could you take to try and prevent that from happening?</label>
                         <textarea
+                          ref={el => {
+                            const refs = fearTextareaRefs.current.get(id) || { name: null, mitigation: null, contingency: null };
+                            fearTextareaRefs.current.set(id, { ...refs, mitigation: el });
+                          }}
                           value={fears[id].mitigation}
                           onChange={(e) => handleFearChange(id, "mitigation", e.target.value)}
-                          onInput={(e) => syncTextareaHeights(e.currentTarget)}
+                          onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
                           disabled={step !== 4}
                         />
@@ -853,9 +877,13 @@ export default function SessionWizard() {
                       <div>
                         <label className="input-label">If your fear comes true, what would you do to move forward?</label>
                         <textarea
+                          ref={el => {
+                            const refs = fearTextareaRefs.current.get(id) || { name: null, mitigation: null, contingency: null };
+                            fearTextareaRefs.current.set(id, { ...refs, contingency: el });
+                          }}
                           value={fears[id].contingency}
                           onChange={(e) => handleFearChange(id, "contingency", e.target.value)}
-                          onInput={(e) => syncTextareaHeights(e.currentTarget)}
+                          onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
                           disabled={step !== 4}
                         />
@@ -877,18 +905,18 @@ export default function SessionWizard() {
                 I'm not worried about taking any of these actions
               </label>
             </div>
+            <div className="ai-button-container mt-2">
+              <AIAssistButton
+                stage="action_planning"
+                isLoading={ai.loadingStage === 'action_planning'}
+                onRequest={() => ai.requestAssistance("action_planning", Object.values(solutions).join(', '), { solutions, fears })}
+                disabled={step !== 4 || (Object.keys(fears).length === 0 && !notWorried) || !ai.canUseAI}
+                sessionId={sessionId}
+                context={{ solutions, fears }}
+              />
+            </div>
           </div>
-          <div className="ai-button-container">
-            <AIAssistButton
-              stage="action_planning"
-              isLoading={ai.loadingStage === 'action_planning'}
-              onRequest={() => ai.requestAssistance("action_planning", Object.values(solutions).join(', '), { solutions, fears })}
-              disabled={step !== 4 || (Object.keys(fears).length === 0 && !notWorried) || !ai.canUseAI}
-              sessionId={sessionId}
-              context={{ solutions, fears }}
-            />
-          </div>
-          <div className="button-container">
+          <div className="button-container" style={{ marginTop: '1rem' }}>
             <button type="button" onClick={prevStep} disabled={step !== 4}>
               Back
             </button>
@@ -919,7 +947,7 @@ export default function SessionWizard() {
           <h1>Stop Nuudling. Start Doodling.</h1>
           <div className="form-content">
             <div className="input-group">
-              <label className="step-description mb-4">The most important step is always the next one. What's yours?</label>
+              <label className="step-description mb-4">The most important step is always the next one. Choose yours.</label>
               <div className="items-container">
                 {Object.entries(solutions).map(([id, action]) => (
                   <div key={id} className="actionable-item-container">
@@ -931,28 +959,32 @@ export default function SessionWizard() {
                     </div>
                     {actionPlan.selectedActionId === id && (
                       <textarea
+                        ref={el => { actionPlanTextareaRefs.current.set(id, el); }}
                         value={actionPlan.elaborationTexts[id] || ""}
                         onChange={(e) => handleElaborationChange(id, e.target.value)}
-                        onInput={(e) => syncTextareaHeights(e.currentTarget)}
+                        onInput={(e) => syncTextareaHeights(e)}
                         className="auto-resizing-textarea"
-                        placeholder="Optional: Elaborate on the exact steps you intend to take here..."
+                        placeholder="Optional Nuudling space if you'd like to elaborate."
                         disabled={step !== 5}
                       />
                     )}
                   </div>
                 ))}
-                <textarea
-                  value={actionPlan.otherActionText}
-                  onChange={(e) => handleOtherActionChange(e.target.value)}
-                  onInput={(e) => syncTextareaHeights(e.currentTarget)}
-                  className="auto-resizing-textarea"
-                  placeholder="Something else..."
-                  disabled={step !== 5}
-                />
+                <div>
+                  <textarea
+                    ref={otherActionTextareaRef}
+                    value={actionPlan.otherActionText}
+                    onChange={(e) => handleOtherActionChange(e.target.value)}
+                    onInput={(e) => syncTextareaHeights(e)}
+                    className="auto-resizing-textarea"
+                    placeholder="Something else..."
+                    disabled={step !== 5}
+                  />
+                </div>
               </div>
             </div>
           </div>
-          <div className="button-container">
+          <div className="button-container" style={{ marginTop: '1rem' }}>
             <button type="button" onClick={prevStep} disabled={step !== 5}>
               Back
             </button>
