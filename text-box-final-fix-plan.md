@@ -1,29 +1,118 @@
-# Text Box Sizing Final Fix Plan
+### Plan to Fix Textbox Issues
 
-## Problem
+Here is the plan to address the two issues with the text boxes:
 
-The text box auto-sizing issue persists, causing both shrinking and text overflow. The root cause has been identified as a lack of width constraints on the `.item-text` divs in Step 3.
+1.  **Placeholder Text Centering (Issue 1)**
+2.  **Premature Expansion (Issue 2)**
 
-## Root Cause Analysis
+---
 
-The problem is not with the `textarea` elements or a conflict with the AI buttons. The issue is specific to **Step 3**, where the text from Step 1 is displayed inside `<div>` elements with the class `.item-text`. These `.item-text` divs lack the necessary CSS to constrain their width within the grid columns, causing them to overflow or shrink based on their content.
-
-## The Definitive Fix
-
-This plan will surgically target the correct elements and establish a robust, unbreakable two-column layout.
-
-1.  **Solidify the Grid Layout**: We will ensure the `.cause-assumption-pair` container uses `display: grid` and `grid-template-columns: 1fr 1fr`, which is the correct modern approach for this layout. We will remove any conflicting `flex` properties from its children (`.cause-column`, `.assumption-column`).
-
-2.  **Constrain the Display Divs**: This is the key step. We will apply `width: 100%` and `box-sizing: border-box` to the `.item-text` class. This forces the divs to respect the boundaries of their parent grid column, guaranteeing they are always the same size and never overflow.
-
-3.  **Ensure Vertical-Only Sizing**: The `height: auto` and `min-height: 75px` properties on `.item-text` will continue to allow the boxes to grow vertically to fit their content, while the `width` properties lock their horizontal size. This perfectly matches the requirement.
-
-## Mermaid Diagram
+### Mermaid Diagram of Changes
 
 ```mermaid
 graph TD
-    A[Start] --> B{Identify Root Cause: `.item-text` in Step 3 lacks width constraints};
-    B --> C{Step 1: Solidify CSS Grid on `.cause-assumption-pair` container};
-    C --> D{Step 2: Apply `width: 100%` & `box-sizing: border-box` to `.item-text`};
-    D --> E{Step 3: Verify vertical-only auto-sizing is preserved};
-    E --> F[End: Stable, predictable, and correct two-column layout];
+    A[Start] --> B{Issue 1: Centering};
+    B --> C[Edit frontend/src/app/globals.css];
+    C --> D[Adjust .auto-resizing-textarea styles];
+    D --> E{Set min-height: 36px};
+    D --> F{Set padding: 8px 20px};
+    D --> G{Set line-height: 1.25};
+
+    A --> H{Issue 2: Expansion};
+    H --> I[Edit frontend/src/app/SessionWizard.tsx];
+    I --> J[Refactor syncTextareaHeights function];
+    J --> K[Modify autoResizeSingle logic];
+    K --> L[Set height to minHeight first, then check scrollHeight];
+    J --> M[Modify paired textarea logic similarly];
+
+    G --> N[Completion];
+    L --> N;
+    M --> N;
+```
+
+---
+
+### Step 1: Fix Placeholder Text Centering in CSS
+
+To fix the vertical alignment of the placeholder text, I will adjust the CSS for the `.auto-resizing-textarea` class in `frontend/src/app/globals.css`. The current combination of `min-height`, `padding`, and `line-height` causes the text to be misaligned.
+
+**File to modify:** `frontend/src/app/globals.css`
+
+**Changes:**
+
+I will replace the existing style block for `.auto-resizing-textarea` and `input[type="text"]` with the following:
+
+```css
+.auto-resizing-textarea,
+input[type="text"] {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 20px;
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  resize: none;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1.25;
+  text-align: center;
+  overflow-y: hidden;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+}
+```
+
+This change adjusts the `min-height` to `36px` to match the JavaScript logic, and modifies `padding` and `line-height` to ensure the text (and placeholder) is vertically centered within the box.
+
+---
+
+### Step 2: Fix Premature Textbox Expansion Logic
+
+To prevent the textarea from expanding prematurely, I will refactor the `syncTextareaHeights` function in `frontend/src/app/SessionWizard.tsx`. The current logic is sensitive to CSS and browser behavior, causing it to expand even for a single line of text. The new logic will be more robust.
+
+**File to modify:** `frontend/src/app/SessionWizard.tsx`
+
+**Changes:**
+
+I will replace the entire `syncTextareaHeights` function (lines 334-378) with the following implementation:
+
+```typescript
+  const syncTextareaHeights = (
+    element1: HTMLTextAreaElement,
+    element2?: HTMLTextAreaElement,
+    index?: number
+  ) => {
+    if (!element1) return;
+
+    const autoResizeSingle = (el: HTMLTextAreaElement) => {
+      const minHeight = 36;
+      el.style.height = `${minHeight}px`; // Set to min height first
+      const scrollHeight = el.scrollHeight;
+      if (scrollHeight > minHeight) {
+        el.style.height = `${scrollHeight}px`;
+      }
+    };
+
+    if (!element2) {
+      autoResizeSingle(element1);
+      return;
+    }
+
+    const minHeight = 36;
+    element1.style.height = `${minHeight}px`;
+    element2.style.height = `${minHeight}px`;
+    
+    const scrollHeight1 = element1.scrollHeight;
+    const scrollHeight2 = element2.scrollHeight;
+
+    const finalHeight = Math.max(scrollHeight1, scrollHeight2, minHeight);
+
+    element1.style.height = `${finalHeight}px`;
+    element2.style.height = `${finalHeight}px`;
+
+    if (index !== undefined) {
+      setCauseTextareaHeights(prev => ({ ...prev, [index]: finalHeight }));
+    }
+  };
+```
+
+This new implementation first resets the height of the textarea(s) to the minimum height, then checks the `scrollHeight`. The height is only increased if the content actually requires more space, preventing the premature expansion.

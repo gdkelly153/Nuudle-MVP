@@ -3,7 +3,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Tooltip from '@/components/Tooltip';
-import { ChevronDown, ChevronUp, Brain, Loader2, AlertCircle, CheckCircle, X } from 'lucide-react';
+import BrainIconWithAnimation from '@/components/BrainIconWithAnimation';
+import { ChevronDown, ChevronUp, Loader2, AlertCircle, CheckCircle, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -22,7 +23,7 @@ interface AIResponse {
 }
 
 interface AIComponentProps {
-  stage: 'problem_articulation' | 'root_cause' | 'identify_assumptions' | 'suggest_causes' | 'perpetuation' | 'action_planning';
+  stage: 'problem_articulation_direct' | 'problem_articulation_intervention' | 'root_cause' | 'identify_assumptions' | 'potential_actions' | 'perpetuation' | 'action_planning';
   sessionId: string;
   context: any;
   onResponse?: (response: string) => void;
@@ -33,44 +34,37 @@ interface HelpMeNuudleButtonProps {
   onClick: () => void;
   disabled: boolean;
   isLoading: boolean;
+  currentStep: number;
+  buttonStep: number;
 }
 
-export const HelpMeNuudleButton: React.FC<HelpMeNuudleButtonProps> = ({ onClick, disabled, isLoading }) => {
+export const HelpMeNuudleButton: React.FC<HelpMeNuudleButtonProps> = ({
+  onClick,
+  disabled,
+  isLoading,
+  currentStep,
+  buttonStep
+}) => {
+  const isCorrectStep = currentStep === buttonStep;
+  const isButtonDisabled = !isCorrectStep || disabled || isLoading;
+  const tooltipShouldBeEnabled = isCorrectStep && disabled && !isLoading;
+
   return (
-    <Tooltip text="Attempt the prompt to utilize me." isDisabled={disabled || isLoading}>
-      <button
-        onClick={onClick}
-        disabled={disabled || isLoading}
-        className="button landing-button"
-        style={{ position: 'relative' }}
-      >
-        {isLoading ? (
-          <>
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            Nuudling...
-          </>
-        ) : (
-          'Help Me Nuudle'
-        )}
-        <div style={{
-          position: 'absolute',
-          top: '-14px',
-          left: '-14px',
-          width: '32px',
-          height: '32px',
-          pointerEvents: 'none',
-          zIndex: 20
-        }}>
-          <Brain style={{ width: '100%', height: '100%' }} className="text-blue-400" />
-          <div className="neural-network-brain">
-            <div className="light-particle"></div>
-            <div className="light-particle"></div>
-            <div className="light-particle"></div>
-            <div className="light-particle"></div>
-            <div className="light-particle"></div>
-          </div>
-        </div>
-      </button>
+    <Tooltip text="Attempt the prompt to utilize me." isDisabled={tooltipShouldBeEnabled}>
+      <div className="help-me-nuudle-button-container inline-block">
+        <BrainIconWithAnimation size={20} className="text-blue-600" />
+        <button
+          onClick={onClick}
+          disabled={isButtonDisabled}
+          className="button landing-button"
+        >
+          {isLoading ? (
+            'Nuudling...'
+          ) : (
+            'Help Me Nuudle'
+          )}
+        </button>
+      </div>
     </Tooltip>
   );
 };
@@ -80,34 +74,42 @@ export const AIAssistButton: React.FC<AIComponentProps & {
   isLoading: boolean;
   onRequest: () => void;
   disabled: boolean;
-}> = ({ stage, isLoading, onRequest, disabled }) => {
+  currentStep: number;
+  buttonStep: number;
+}> = ({ stage, isLoading, onRequest, disabled, currentStep, buttonStep }) => {
+  const isCorrectStep = currentStep === buttonStep;
+  const isButtonDisabled = !isCorrectStep || disabled || isLoading;
+  const tooltipShouldBeEnabled = isCorrectStep && disabled && !isLoading;
+
   const buttonText = {
-    problem_articulation: 'Help me articulate my problem',
-    root_cause: 'Help me discover overlooked causes',
+    problem_articulation_direct: 'Help me articulate my problem',
+    problem_articulation_intervention: 'Help me articulate my problem',
+    root_cause: 'Help me identify root causes',
     identify_assumptions: 'Help me identify assumptions',
-    suggest_causes: 'Help me with potential actions',
-    perpetuation: 'Help me think of more ways I could contribute to the problem',
+    potential_actions: 'Help me with potential actions',
+    perpetuation: 'Help me reflect on my potential role',
     action_planning: 'Help me process my concerns'
   };
 
   const descriptions = {
-    problem_articulation: 'AI will ask questions to help you articulate your problem more clearly.',
+    problem_articulation_direct: 'AI will ask questions to help you articulate your problem more clearly.',
+    problem_articulation_intervention: 'AI will ask questions to help you articulate your problem more clearly.',
     root_cause: 'AI will suggest additional root causes you might have overlooked.',
     identify_assumptions: 'AI will help you identify potential assumptions in your stated causes.',
-    suggest_causes: 'AI will suggest additional causes for you to consider.',
-    perpetuation: 'AI will help you brainstorm different ways you might be contributing to the problem.',
+    potential_actions: 'AI will ask questions to help you think more deeply about your drafted actions and explore other possibilities.',
+    perpetuation: 'AI will guide you through a thought experiment to uncover the behaviors and patterns that keep the problem in place.',
     action_planning: 'AI will help you reality-test your concerns and strengthen your plans.'
   };
 
   return (
-    <Tooltip text="Attempt the prompt to utilize me." isDisabled={disabled || isLoading}>
-      <div className="ai-button-wrapper" style={{ position: 'relative' }}>
+    <Tooltip text="Attempt the prompt to utilize me." isDisabled={tooltipShouldBeEnabled}>
+      <div className="ai-button-wrapper relative inline-block">
         <button
           onClick={onRequest}
-          disabled={disabled || isLoading}
+          disabled={isButtonDisabled}
           className={`
-            ai-assist-button inline-flex items-center rounded-md transition-all duration-200
-            ${disabled
+            ai-assist-button inline-flex items-center gap-2 rounded-md transition-all duration-200
+            ${isButtonDisabled
               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
               : isLoading
                 ? 'bg-blue-100 text-blue-600 cursor-wait'
@@ -115,36 +117,15 @@ export const AIAssistButton: React.FC<AIComponentProps & {
             }
           `}
           aria-describedby={`ai-help-description-${stage}`}
+          style={{ minWidth: 'fit-content' }}
         >
+          <BrainIconWithAnimation size={16} className="text-blue-600" />
           {isLoading ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              <span>Nuudling...</span>
-            </>
+            <span style={{ fontSize: 'inherit' }}>Nuudling...</span>
           ) : (
             <span>{buttonText[stage]}</span>
           )}
         </button>
-        {!isLoading && (
-          <div style={{
-            position: 'absolute',
-            top: '-8px',
-            left: '-8px',
-            width: '16px',
-            height: '16px',
-            pointerEvents: 'none',
-            zIndex: 20,
-          }}>
-            <Brain style={{ width: '100%', height: '100%' }} className="text-blue-300" />
-            <div className="neural-network-brain" style={{ transform: 'scale(0.5)', transformOrigin: 'top left' }}>
-              <div className="light-particle"></div>
-              <div className="light-particle"></div>
-              <div className="light-particle"></div>
-              <div className="light-particle"></div>
-              <div className="light-particle"></div>
-            </div>
-          </div>
-        )}
       </div>
     </Tooltip>
   );
@@ -173,10 +154,10 @@ export const AIResponseCard: React.FC<{
   };
 
   return (
-    <div 
+    <div
       className={`
-        mt-4 bg-blue-50 border border-blue-200 rounded-lg overflow-hidden transition-all duration-300
-        ${isExpanded ? 'max-h-96' : 'max-h-12'}
+        mt-4 bg-blue-50 border border-blue-200 rounded-lg transition-all duration-300
+        ${isExpanded ? '' : 'max-h-12 overflow-hidden'}
       `}
       role="region"
       aria-label="AI assistance response"
@@ -184,8 +165,7 @@ export const AIResponseCard: React.FC<{
       {/* Header */}
       <div className="flex items-center justify-between p-3 bg-blue-100">
         <div className="flex items-baseline space-x-2">
-          <Brain className="w-4 h-4 text-blue-600" />
-          <span className="text-sm font-medium text-blue-900">Nuudle AI Suggestion</span>
+          <span className="text-sm font-medium text-blue-900">Nuddle AI</span>
         </div>
         
         <div className="flex items-center space-x-1">
@@ -223,15 +203,14 @@ export const AIResponseCard: React.FC<{
                 <>
                   <button
                     onClick={() => handleFeedback(true)}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-green-700 bg-green-100 rounded-md hover:bg-green-200 transition-colors"
+                    className="feedback-button inline-flex items-center px-3 py-1.5 text-xs font-medium text-green-700 bg-green-100 rounded-md hover:bg-green-200 transition-colors"
                   >
-                    <CheckCircle className="w-3 h-3 mr-1" />
                     This helps
                   </button>
                   
                   <button
                     onClick={() => handleFeedback(false)}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                    className="feedback-button inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
                   >
                     Not helpful
                   </button>

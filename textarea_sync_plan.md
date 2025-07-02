@@ -1,48 +1,40 @@
-### Plan to Fix Textarea Height Synchronization
+# Plan to Synchronize Text Area Heights
 
-#### 1. Diagnosis of the Root Cause
+The goal is to ensure that when either the "Contributing Cause" or "Potential Assumption" text area expands vertically, the adjacent text area expands to the same height simultaneously.
 
-The component currently uses a `useEffect` hook that attempts to resize all textareas with the class `auto-resizing-textarea` whenever there's a state change. This hook's logic for pairing textareas is flawed because it queries textareas from the entire document—including hidden steps—and incorrectly pairs them based on their order in the DOM. This global, faulty resizing logic interferes with the correct, pair-specific resizing that is supposed to happen on user input.
+### 1. Update `useLayoutEffect` Hook
 
-The `onInput` handlers for each textarea pair are correctly set up to call the `autoResizeTextarea` function with the right sibling, but their effect is being undone by the problematic `useEffect`.
+The `useLayoutEffect` hook in `frontend/src/app/SessionWizard.tsx` will be modified to handle the initial rendering and subsequent state updates for the paired text areas.
 
-#### 2. Proposed Solution
+- The hook will iterate through the `causeTextAreaRefs`.
+- For each pair of "Contributing Cause" and "Potential Assumption" text areas, it will calculate the maximum `scrollHeight` between the two.
+- Both text areas in the pair will then be set to this maximum height.
+- The existing logic for other auto-resizing text areas will be preserved.
 
-My plan is to remove the incorrect global resizing logic and replace it with a more targeted approach. I will create a dedicated function to manage the height synchronization for each pair of textareas. This will encapsulate the logic cleanly and ensure that resizing only affects the intended pairs.
+### 2. Enhance `syncTextareaHeights` Function
 
-Here is a Mermaid diagram illustrating the proposed logic:
+The `syncTextareaHeights` function in `frontend/src/app/SessionWizard.tsx` will be updated to provide real-time synchronization as the user types.
+
+- The function will be modified to accept the index of the cause and the specific field ("cause" or "assumption") being edited.
+- When a user types in either text area, the function will identify its corresponding pair using the `causeTextAreaRefs`.
+- It will then calculate the maximum required height and apply it to both text areas in the pair instantly.
+
+### Mermaid Diagram
 
 ```mermaid
 graph TD
-    subgraph SessionWizard Component
-        A[State for 'causes'] --> B{Render Loop for Cause/Assumption Pairs};
-        B --> C1[Pair 1: Cause Textarea];
-        B --> C2[Pair 1: Assumption Textarea];
+    subgraph Real-time Sync (onInput)
+        A[User types in a textarea] --> B{Is it a paired textarea?};
+        B -- Yes --> C[Find the corresponding textarea in the pair];
+        C --> D[Calculate the maximum height needed for both];
+        D --> E[Apply the new height to both textareas];
+        B -- No --> F[Resize only the single textarea];
     end
 
-    subgraph "For Each Pair"
-        C1 -- onInput --> D{syncTextareaHeights};
-        C2 -- onInput --> D{syncTextareaHeights};
+    subgraph Initial Render & State Change (useLayoutEffect)
+        G[Component Renders or Updates] --> H[The useLayoutEffect hook is triggered];
+        H --> I[Find all paired textareas];
+        I --> J[For each pair, calculate and apply the max height];
+        H --> K[Find all other resizable textareas];
+        K --> L[Resize each one individually];
     end
-
-    subgraph syncTextareaHeights Function
-        D --> E[Get both textarea elements];
-        E --> F[Reset heights to 'auto'];
-        F --> G[Calculate max scrollHeight];
-        G --> H[Apply max height to both textareas];
-    end
-
-    style D fill:#f9f,stroke:#333,stroke-width:2px
-```
-
-#### 3. Step-by-Step Implementation Plan
-
-1.  **Remove Problematic `useEffect`:** I will start by deleting the `useEffect` at `frontend/src/app/SessionWizard.tsx:71-83` to eliminate the source of the incorrect resizing behavior.
-
-2.  **Refactor `autoResizeTextarea`:** I will rename the `autoResizeTextarea` function to `syncTextareaHeights` to more accurately reflect its purpose. The core logic will be slightly adjusted to ensure it robustly handles the two textareas passed to it.
-
-3.  **Update `onInput` Handlers:** The `onInput` handlers for the "Contributing Cause" and "Potential Assumption" textareas will be updated to call the new `syncTextareaHeights` function, ensuring that the correct pair of textareas is resized together.
-
-4.  **Add a `useEffect` for Dynamic Resizing:** I will introduce a new `useEffect` that triggers the `syncTextareaHeights` function whenever the `causes` array changes. This will handle the initial rendering and cases where rows are added or removed, ensuring all pairs are correctly sized.
-
-This approach will result in a more robust, maintainable, and bug-free solution that correctly handles the height synchronization as per your requirements.

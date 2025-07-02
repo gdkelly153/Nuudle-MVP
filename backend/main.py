@@ -10,6 +10,7 @@ app = FastAPI()
 
 origins = [
     "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
 app.add_middleware(
@@ -40,6 +41,7 @@ class SessionCreate(BaseModel):
     solutions: List[str]
     fears: List[Fear]
     action_plan: str
+    ai_summary: Optional[dict] = None
 
 # This is the model for reading a session from the DB
 class SessionRead(BaseModel):
@@ -52,6 +54,8 @@ class SessionRead(BaseModel):
     solutions: List[str]
     fears: List[Fear]
     action_plan: str
+    ai_summary: Optional[dict] = None
+    summary_header: Optional[str] = None
 
 def create_table():
     conn = sqlite3.connect(DATABASE)
@@ -68,7 +72,9 @@ def create_table():
             perpetuations TEXT,
             solutions TEXT,
             fears TEXT,
-            action_plan TEXT
+            action_plan TEXT,
+            ai_summary TEXT,
+            summary_header TEXT
         )
     """)
     conn.commit()
@@ -76,10 +82,27 @@ def create_table():
 
 create_table()
 
+def extract_summary_header(ai_summary: Optional[dict], pain_point: str) -> str:
+    """Extract the title from AI summary or create a fallback header"""
+    if ai_summary and isinstance(ai_summary, dict) and 'title' in ai_summary:
+        title = ai_summary['title']
+        if title and title.strip():
+            return title.strip().lower()
+    
+    # Fallback: create a simple header from the first few words of pain_point
+    if pain_point and pain_point.strip():
+        words = pain_point.strip().split()[:3]
+        return ' '.join(words).lower().replace(',', '').replace('.', '')
+    
+    return 'untitled session'
+
 @app.post("/api/sessions", response_model=SessionRead)
-def create_session(session: SessionCreate):
+async def create_session(session: SessionCreate):
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
+    
+    # Extract summary header from AI summary or create fallback
+    summary_header = extract_summary_header(session.ai_summary, session.pain_point)
     
     # Create the issue_tree structure
     issue_tree = IssueTree(
@@ -93,11 +116,12 @@ def create_session(session: SessionCreate):
     perpetuations_json = json.dumps(session.perpetuations)
     solutions_json = json.dumps(session.solutions)
     fears_json = json.dumps([fear.model_dump() for fear in session.fears])
+    ai_summary_json = json.dumps(session.ai_summary) if session.ai_summary else None
 
     cursor.execute("""
-        INSERT INTO sessions (pain_point, issue_tree, assumptions, perpetuations, solutions, fears, action_plan)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (session.pain_point, issue_tree_json, assumptions_json, perpetuations_json, solutions_json, fears_json, session.action_plan))
+        INSERT INTO sessions (pain_point, issue_tree, assumptions, perpetuations, solutions, fears, action_plan, ai_summary, summary_header)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (session.pain_point, issue_tree_json, assumptions_json, perpetuations_json, solutions_json, fears_json, session.action_plan, ai_summary_json, summary_header))
     
     session_id = cursor.lastrowid
     conn.commit()
@@ -117,7 +141,9 @@ def create_session(session: SessionCreate):
         perpetuations=session.perpetuations,
         solutions=session.solutions,
         fears=session.fears,
-        action_plan=session.action_plan
+        action_plan=session.action_plan,
+        ai_summary=session.ai_summary,
+        summary_header=summary_header
     )
 
 @app.get("/api/sessions", response_model=List[SessionRead])
@@ -125,7 +151,7 @@ def get_sessions():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT id, created_at, pain_point, issue_tree, assumptions, perpetuations, solutions, fears, action_plan FROM sessions ORDER BY created_at DESC")
+    cursor.execute("SELECT id, created_at, pain_point, issue_tree, assumptions, perpetuations, solutions, fears, action_plan, ai_summary, summary_header FROM sessions ORDER BY created_at DESC")
     rows = cursor.fetchall()
     conn.close()
     
@@ -140,6 +166,34 @@ def get_sessions():
             perpetuations=json.loads(row["perpetuations"]),
             solutions=json.loads(row["solutions"]),
             fears=json.loads(row["fears"]),
-            action_plan=row["action_plan"]
+            action_plan=row["action_plan"],
+            ai_summary=json.loads(row["ai_summary"]) if row["ai_summary"] else None,
+            summary_header=row["summary_header"]
         ))
     return sessions
+
+@app.get("/api/sessions/{session_id}", response_model=SessionRead)
+def get_session(session_id: int):
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, created_at, pain_point, issue_tree, assumptions, perpetuations, solutions, fears, action_plan, ai_summary, summary_header FROM sessions WHERE id = ?", (session_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    return SessionRead(
+        id=row["id"],
+        created_at=row["created_at"],
+        pain_point=row["pain_point"],
+        issue_tree=json.loads(row["issue_tree"]),
+        assumptions=json.loads(row["assumptions"]),
+        perpetuations=json.loads(row["perpetuations"]),
+        solutions=json.loads(row["solutions"]),
+        fears=json.loads(row["fears"]),
+        action_plan=row["action_plan"],
+        ai_summary=json.loads(row["ai_summary"]) if row["ai_summary"] else None,
+        summary_header=row["summary_header"]
+    )

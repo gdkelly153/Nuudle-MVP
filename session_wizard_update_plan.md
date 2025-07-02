@@ -1,44 +1,25 @@
-# Session Wizard Update Plan
+### Plan to Update `frontend/src/app/SessionWizard.tsx`
 
-This document outlines the plan to update the Session Wizard component based on user feedback.
+Here are the planned modifications for the `frontend/src/app/SessionWizard.tsx` file:
 
-### 1. Update Placeholder Text
+1.  **Adjust AI Button Spacing:**
+    *   To fix the spacing issue with the "Help me with potential actions" button in Step 3, its container (`div.ai-button-container`) will be moved inside the `div.form-content` to ensure consistent placement with other AI buttons.
 
-*   **File:** `frontend/src/app/SessionWizard.tsx`
-*   **Line:** 368
-*   **Change:** Modify the `placeholder` attribute of the initial `textarea` from "What problem would you like to work through?" to "What problem would you like to work through today?".
+    *   **Mermaid Diagram of Structural Change:**
+        ```mermaid
+        graph TD
+            subgraph Before
+                A["div.form-content"]
+                B["div.ai-button-container"]
+            end
+            subgraph After
+                C["div.form-content"] --> D["div.ai-button-container"]
+            end
+        ```
 
-### 2. Standardize Spacing
+2.  **Update On-Screen Text:**
+    *   The description text in Step 3 will be changed from "For each contributing cause you identified, outline a potential action you can take to begin addressing it." to "Select a contributing cause and outline a potential action you could take to address it.".
+    *   The placeholder text in the final step will be updated from "Optional: Elaborate on the exact steps you intend to take here..." to "Optional Nuudling space if you'd like to elaborate.".
 
-*   **Goal:** Ensure consistent spacing between step headers and italicized descriptions across all steps.
-*   **Method:** Apply the `step-description` class to the labels in each relevant step, replacing the `input-label` class. This will standardize the `margin-bottom` to `1rem`.
-*   **File:** `frontend/src/app/SessionWizard.tsx`
-*   **Locations:**
-    *   **Step 1:** The `<label>` at line 408.
-    *   **Step 3:** The `<label>` at line 615.
-    *   **Step 5:** The `<label>` at line 862.
-
-### 3. Adjust Step 1 Italicized Text
-
-*   **File:** `frontend/src/app/SessionWizard.tsx`
-*   **Line:** 411
-*   **Change:**
-    *   Remove the `<br /><br />` tags to eliminate the large paragraph gap.
-    *   Wrap the second sentence in a `<span>` element and apply an inline style for a left margin (e.g., `style={{ marginLeft: '1em' }}`) to create an indent.
-
-### Mermaid Diagram
-
-```mermaid
-graph TD
-    A[Start] --> B{Update Placeholder Text};
-    B --> C{Standardize Spacing};
-    C --> D{Adjust Step 1 Text};
-    D --> E[Finish];
-
-    subgraph "File: frontend/src/app/SessionWizard.tsx"
-        B --> B1("Line 368: Change placeholder text");
-        C --> C1("Line 408: Change label class to 'step-description'");
-        C --> C2("Line 615: Change label class to 'step-description'");
-        C --> C3("Line 862: Change label class to 'step-description'");
-        D --> D1("Line 411: Remove <br> tags and add indented <span>");
-    end
+3.  **Center Text Box Labels:**
+    *   The labels for "Contributing Cause", "Potential Assumption", and "My Contributions" will be centered above their respective text boxes by adding the inline style `style={{ display: 'block', textAlign: 'center' }}` to each `item-label`.

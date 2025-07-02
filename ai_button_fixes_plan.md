@@ -1,65 +1,66 @@
-# AI Button Critical Fixes - Plan
+# AI Button Fixes Plan
 
-This document outlines the plan to address three critical issues related to the AI buttons in the Nuudle session wizard.
+This document outlines the plan to fix the "Help me with potential actions" AI button in Step 3 of the Session Wizard.
 
-### Investigation Summary
+## The Problem
 
-1.  **AI Button Availability:** The root cause is a state flag `isEnabled` in the `useAIAssistant` hook. It's initialized to `false` and only set to `true` when the "Help me Nuudle" button is clicked on the landing page. Subsequent AI buttons are conditionally rendered based on this flag, so they don't appear if the first button isn't clicked.
-2.  **Brain Icon Size:** Both the main `HelpMeNuudleButton` and the subsequent `AIAssistButton` components use a hardcoded size of `32px` for the brain icon's container. The animation is also based on this size.
-3.  **AI Button Positioning:** The subsequent AI buttons are placed inside a generic `button-container` class which is styled with `justify-content: center`, overriding any attempts to left-align them. The layout structure isn't set up to align the buttons with the content boxes above them.
+The AI button in Step 3 is misconfigured. It's supposed to help the user brainstorm potential actions, but instead, it's incorrectly trying to suggest more *causes*. This leads to two main issues:
+1.  It doesn't provide the intended assistance to the user.
+2.  It fails to send the user's drafted actions to the backend, causing an error.
 
----
+## The Goal
 
-### Proposed Plan
+The goal is to refactor the feature so that it correctly analyzes the user's drafted actions and provides helpful, context-aware questions to stimulate deeper thinking.
 
-Here is a step-by-step plan to resolve these issues.
+## The Plan
+
+The plan involves changes to both the backend and frontend code.
+
+### 1. Backend Update (`api/services/aiService.js`)
+
+-   **Rename the AI Stage:** The `suggest_causes` stage will be renamed to `potential_actions` to accurately reflect its new purpose.
+-   **Rewrite the AI Prompt:** The prompt for this stage will be rewritten. The new prompt will instruct the AI to act as a coach, asking open-ended questions based on the user's problem statement, selected causes, and drafted actions.
+
+### 2. Frontend Component Update (`frontend/src/components/AIComponents.tsx`)
+
+-   **Update Stage Name:** The `AIAssistButton` component will be updated to use the new `potential_actions` stage name.
+-   **Update Description:** The button's tooltip/description will be updated to align with its new functionality of helping the user brainstorm actions.
+
+### 3. Frontend Wizard Update (`frontend/src/app/SessionWizard.tsx`)
+
+-   **Use New Stage:** The `AIAssistButton` in Step 3 will be configured to use the `potential_actions` stage.
+-   **Send Correct Data:** The request sent to the AI will be modified to include the user's drafted actions in the `userInput` field. The context will also be updated to include the relevant causes or contributions.
+-   **Improve UI Logic:** The button's `disabled` state will be updated to ensure it's only enabled when a cause has been selected and the user has started typing an action.
+-   **Clean Up Obsolete UI:** The "Suggested Causes" chip display will be removed from Step 3, as it is no longer relevant. The AI's response (a set of questions) will be displayed in the standard `AIResponseCard`.
+
+### Data Flow Diagram
+
+This diagram illustrates the corrected data flow:
 
 ```mermaid
-graph TD
-    subgraph "Issue 1: Availability Logic"
-        A[Start] --> B{Change `isEnabled` default to `true`};
-        B --> C{Remove `setIsEnabled` from initial button's `onClick`};
-        C --> D{Add `disabled={step !== currentStep}` to all AI buttons};
-        D --> E{Remove conditional `ai.isEnabled &&` render checks};
-        E --> F[End: Buttons always visible, only active on current step];
-    end
+sequenceDiagram
+    participant User
+    participant SessionWizard.tsx as Frontend
+    participant AIComponents.tsx as AI Button
+    participant aiService.js as Backend
+    participant Anthropic API
 
-    subgraph "Issue 2: Icon Scaling"
-        G[Start] --> H{In `AIAssistButton`, halve icon container `width` & `height` to `16px`};
-        H --> I{Adjust icon's `top`/`left` position for new size};
-        I --> J{Apply `transform: scale(0.5)` to the animation container};
-        J --> K[End: Subsequent icons are 50% smaller, animation scales proportionally];
-    end
+    User->>Frontend: Clicks on a cause/contribution to add an action
+    Frontend->>Frontend: Adds item to `solutions` state, displays textarea
+    User->>Frontend: Types a potential action into the textarea
+    User->>AI Button: Clicks "Help me with potential actions"
 
-    subgraph "Issue 3: Positioning"
-        L[Start] --> M{Create new `.ai-button-container` CSS class with `justify-content: flex-start`};
-        M --> N{Replace reused `.button-container` with new class for AI buttons in wizard};
-        N --> O{Adjust layout for Step 1 buttons to use new container};
-        O --> P[End: AI buttons are left-aligned under content boxes];
-    end
+    AI Button->>Frontend: Calls `onRequest` prop
+    Frontend->>Backend: `ai.requestAssistance('potential_actions', draftedActions, context)`
+    Note over Frontend,Backend: `draftedActions` contains user's text<br/>`context` contains pain point, causes, etc.
+
+    Backend->>Backend: Constructs prompt using `potential_actions` template and received data
+    Backend->>Anthropic API: Sends constructed prompt
+    Anthropic API-->>Backend: Returns helpful questions
+    Backend-->>Frontend: Returns AI response and updates usage stats
+
+    Frontend->>Frontend: Displays questions in `AIResponseCard`
+    User->>Frontend: Reads questions and refines their potential actions
 ```
 
-### Detailed Breakdown
-
-#### Part 1: Fix AI Button Availability Logic
-
-*   **Goal:** AI buttons will be visible on every step, but only interactive on the current step.
-*   **Actions:**
-    1.  **Enable AI by Default:** In `frontend/src/components/AIComponents.tsx`, change the `isEnabled` state in the `useAIAssistant` hook to be `true` by default.
-    2.  **Enforce Step-Specific Interaction:** In `frontend/src/app/SessionWizard.tsx`, update the `disabled` property of each `AIAssistButton` to include a check (`step !== X`) ensuring it's only active on its designated step.
-    3.  **Cleanup:** Remove the now-redundant `ai.setIsEnabled(true)` call from the landing page button and the `ai.isEnabled &&` conditional rendering wrappers.
-
-#### Part 2: Fix Brain Icon Size Scaling
-
-*   **Goal:** Reduce the brain icon size by 50% for all AI buttons after the landing page.
-*   **Actions:**
-    1.  **Resize Icon:** In `frontend/src/components/AIComponents.tsx`, modify the `AIAssistButton` component, changing the icon container's `width` and `height` from `32px` to `16px` and adjusting its absolute positioning.
-    2.  **Scale Animation:** Apply a `transform: 'scale(0.5)'` style to the `neural-network-brain` `div` within the `AIAssistButton` to ensure the animation scales down proportionally with the icon.
-
-#### Part 3: Fix AI Button Positioning
-
-*   **Goal:** Position AI buttons to be left-aligned directly under their associated content.
-*   **Actions:**
-    1.  **Create Dedicated Container Style:** In `frontend/src/app/globals.css`, add a new `.ai-button-container` class with `display: flex` and `justify-content: flex-start`.
-    2.  **Apply New Style:** In `frontend/src/app/SessionWizard.tsx`, replace the incorrect `.button-container` with the new `.ai-button-container` for all `AIAssistButton` instances in steps 2, 3, and 4.
-    3.  **Adjust Step 1 Layout:** For the unique two-button layout in Step 1, wrap the existing `cause-assumption-pair` `div` in the new `.ai-button-container` to enforce proper left alignment for the group.
+This plan will resolve the error and create a more intuitive and helpful user experience.

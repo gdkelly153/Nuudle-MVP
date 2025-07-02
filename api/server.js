@@ -12,7 +12,7 @@ async function startServer() {
   // --- 2. Dynamically Import Services ---
   // These modules depend on the environment variables being loaded
   const { default: dbService } = await import('./services/databaseService.js');
-  const { getResponse } = await import('./services/aiService.js');
+  const { getResponse, getSummary } = await import('./services/aiService.js');
 
   // --- 3. Initialize Express App ---
   const app = express();
@@ -31,8 +31,12 @@ async function startServer() {
 
   app.post('/api/ai/assist', async (req, res) => {
     const { userId = 'default-user', sessionId, stage, userInput, sessionContext } = req.body;
-    if (!sessionId || !stage || !userInput || !sessionContext) {
-      return res.status(400).json({ error: 'sessionId, stage, userInput, and sessionContext are required.' });
+    if (!sessionId || !stage || !sessionContext) {
+      return res.status(400).json({ error: 'sessionId, stage, and sessionContext are required.' });
+    }
+    // userInput can be empty for identify_assumptions stage
+    if (!userInput && stage !== 'identify_assumptions') {
+      return res.status(400).json({ error: 'userInput is required for this stage.' });
     }
     try {
       await dbService.createSession(sessionId, userId);
@@ -70,6 +74,23 @@ async function startServer() {
       res.status(500).json({ success: false, error: 'Internal Server Error' });
     }
   });
+
+  app.post('/api/ai/summary', async (req, res) => {
+    const { userId = 'default-user', sessionId, sessionData } = req.body;
+    if (!sessionId || !sessionData) {
+      return res.status(400).json({ error: 'sessionId and sessionData are required.' });
+    }
+    try {
+      await dbService.createSession(sessionId, userId);
+      const result = await getSummary(userId, sessionId, sessionData);
+      const statusCode = result.success ? 200 : (result.error && result.error.includes('Rate limit') ? 429 : 500);
+      res.status(statusCode).json(result);
+    } catch (error) {
+      console.error('Summary generation error:', error);
+      res.status(500).json({ success: false, error: 'Internal Server Error' });
+    }
+  });
+
 
   // --- 6. Initialize Database and Start Server ---
   await dbService.initialize();
