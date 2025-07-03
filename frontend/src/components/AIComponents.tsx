@@ -216,7 +216,7 @@ export const AIResponseCard: React.FC<{
                   </button>
                 </>
               ) : (
-                <div className="flex items-center text-xs text-green-600">
+                <div className="flex items-center text-xs text-progress-complete">
                   <CheckCircle className="w-3 h-3 mr-1" />
                   Thanks for your feedback!
                 </div>
@@ -293,11 +293,11 @@ export const SuggestedCause: React.FC<{
   };
 
   return (
-    <div 
+    <div
       className={`
         inline-flex items-center px-3 py-1.5 m-1 text-sm rounded-full border transition-all duration-200
-        ${isAdded 
-          ? 'bg-green-100 border-green-300 text-green-800' 
+        ${isAdded
+          ? 'bg-progress-complete-light border-progress-complete text-progress-complete'
           : 'bg-blue-50 border-blue-200 text-blue-800 hover:bg-blue-100 cursor-pointer'
         }
       `}
@@ -322,7 +322,7 @@ export const SuggestedCause: React.FC<{
           </button>
         </div>
       ) : (
-        <CheckCircle className="w-3 h-3 text-green-600" />
+        <CheckCircle className="w-3 h-3 text-progress-complete" />
       )}
     </div>
   );

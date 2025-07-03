@@ -134,14 +134,14 @@ const SessionCard: React.FC<SessionProps> = ({ session, onViewSummary }) => {
       <div className="session-card-footer">
         <button
           onClick={() => onViewSummary(session)}
-          className="action-button-compact view-summary-button-compact view-button-blue"
+          className="action-button-compact view-summary-button-compact"
         >
           View AI Summary
         </button>
         <button
           onClick={handleDownloadPDF}
           disabled={isGenerating || summaryDownloader.generatingSummary}
-          className="action-button-compact download-button-compact download-button-green"
+          className="action-button-compact download-button-compact"
           title="Download PDF"
         >
           {(isGenerating || summaryDownloader.generatingSummary) ? "Generating..." : "Download PDF"}
@@ -149,7 +149,7 @@ const SessionCard: React.FC<SessionProps> = ({ session, onViewSummary }) => {
         <button
           onClick={handleSaveAsImage}
           disabled={isGenerating || summaryDownloader.generatingSummary}
-          className="action-button-compact image-button-compact image-button-purple"
+          className="action-button-compact image-button-compact"
           title="Save as Image"
         >
           {(isGenerating || summaryDownloader.generatingSummary) ? "Generating..." : "Save as Image"}

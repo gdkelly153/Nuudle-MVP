@@ -287,11 +287,11 @@ useEffect(() => {
     }
   }, [notWorried]);
 
-  // Clear highlighted container and open action boxes when navigating away from Step 3
+  // Clear highlighted container when navigating away from Step 3
   useEffect(() => {
     if (step !== 3) {
       setHighlightedContainerId(null);
-      setOpenActionBoxIds([]);
+      // Don't clear openActionBoxIds here - let the Next button handle it
     }
   }, [step]);
 
@@ -398,6 +398,9 @@ useEffect(() => {
   };
 
   const handlePerpetuationSelection = (selection: number | "none") => {
+    // Only allow selection if we're on step 2
+    if (step !== 2) return;
+    
     const selectionStr = String(selection);
 
     if (selection === "none") {
@@ -416,6 +419,9 @@ useEffect(() => {
   };
 
   const handleSolutionSelection = (id: string) => {
+    // Only allow selection if we're on step 3
+    if (step !== 3) return;
+    
     // Initialize solution text if it doesn't exist
     if (solutions[id] === undefined) {
       setSolutions(prev => ({ ...prev, [id]: "" }));
@@ -453,6 +459,9 @@ useEffect(() => {
   };
 
   const handleFearSelection = (id: string) => {
+    // Only allow selection if we're on step 4
+    if (step !== 4) return;
+    
     setOpenFearSections(prev => {
       const newOpenFears = prev.includes(id)
         ? prev.filter(fearId => fearId !== id)
@@ -489,6 +498,9 @@ useEffect(() => {
   };
 
   const handleActionSelection = (actionId: string) => {
+    // Only allow selection if we're on step 5
+    if (step !== 5) return;
+    
     setActionPlan(prev => ({
       ...prev,
       selectedActionIds: prev.selectedActionIds.includes(actionId)
@@ -713,14 +725,18 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
     <>
       <style>{`
         .container-highlighted {
-          border: 2px solid #007bff !important;
+          border: 2px solid var(--golden-mustard) !important;
           border-radius: 8px;
+          box-shadow: 0 0 0 4px var(--golden-mustard-focus) !important;
         }
         .container-highlighted .read-only-textarea {
           border: 1px solid #ccc !important;
         }
         .container-highlighted .auto-resizing-textarea {
           border: 1px solid #ccc !important;
+        }
+        .selectable-item .read-only-textarea {
+          pointer-events: none;
         }
         .auto-resizing-textarea {
           padding: 0.5rem;
@@ -742,7 +758,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
         {/* Step 0: Problem Articulation */}
         <div className={getStepClass(0)} ref={(el) => { stepRefs.current[0] = el; }}>
           <h1>Nuudle</h1>
-          <h2 className="subheader">Mind Matters.</h2>
+          <h2 className="subheader">Mind Matters</h2>
           <div className="form-content initial-form-content">
             <div className="input-group">
               <div className="items-container">
@@ -1003,7 +1019,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                     >
                       {selectedPerpetuations.includes(String(perpetuation.id)) && (
                         <Check
-                          className="w-5 h-5 text-green-600"
+                          className="w-5 h-5 text-progress-complete"
                           style={{
                             position: 'absolute',
                             left: '8px',
@@ -1038,6 +1054,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                       id="none-of-the-above"
                       checked={selectedPerpetuations.includes("none")}
                       onChange={() => handlePerpetuationSelection("none")}
+                      disabled={step !== 2}
                       className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 custom-checkbox"
                     />
                     <label htmlFor="none-of-the-above" className="ml-2 block text-sm text-gray-900">
@@ -1202,6 +1219,12 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                   Object.entries(solutions).filter(([_, action]) => action.trim() !== "")
                 );
                 setSolutions(filteredSolutions);
+                
+                // Keep action boxes open only for solutions that have content
+                setOpenActionBoxIds(prev =>
+                  prev.filter(id => solutions[id] && solutions[id].trim() !== "")
+                );
+                
                 nextStep();
               }} disabled={step !== 3 || Object.keys(solutions).length === 0 || !Object.values(solutions).some((action) => action.trim() !== "")}>
                 Next
@@ -1291,7 +1314,8 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                 type="checkbox"
                 id="not-worried"
                 checked={notWorried}
-                onChange={(e) => setNotWorried(e.target.checked)}
+                onChange={(e) => step === 4 && setNotWorried(e.target.checked)}
+                disabled={step !== 4}
                 className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
               />
               <label htmlFor="not-worried" className="ml-2 block text-sm text-gray-900">
