@@ -1,20 +1,78 @@
-### Plan to Update the UI Text
+# Plan to Refactor SessionCard Component
 
-1.  **Modify Step 1 Text:** I will separate the introductory text in Step 1 into two distinct paragraphs to improve readability.
-2.  **Capitalize Labels:** I will capitalize the words "Cause" and "Assumption" in the input field labels for both Step 1 and Step 3 to ensure consistency.
+This plan outlines the steps to refactor the `SessionCard.tsx` component to correctly display the "Contributing Cause" and "Potential Assumption" sections.
 
-Here is a diagram illustrating the change to the text block:
+## 1. Restructure `SessionCard.tsx`
 
-```mermaid
-graph TD
-    subgraph Before
-        A["<label>We live in a causal universe... an assumption is something believed to be true without evidence.</label>"]
-    end
-    subgraph After
-        B["<label>"] --> C["<p>We live in a causal universe. Every effect has a cause that precedes it. Your problem is the effect.</p>"]
-        B --> D["<p>List up to five causes that you think could be contributing to your problem...</p>"]
-    end
-    A --> B
+The main goal is to move the labels outside of the bordered container.
+
+### Current Structure (Simplified):
+
+```jsx
+<div>
+  <strong>Issue Tree:</strong>
+  {/* ... */}
+</div>
+<div>
+  <strong>Assumptions:</strong>
+  {/* ... */}
+</div>
 ```
 
-All changes will be applied to the `frontend/src/app/page.tsx` file.
+### New Structure (Simplified):
+
+```jsx
+<div className="cause-assumption-section">
+  <div className="cause-column">
+    <h4 className="column-label">Contributing Cause</h4>
+    <div className="items-box">
+      {/* ... list of causes ... */}
+    </div>
+  </div>
+  <div className="assumption-column">
+    <h4 className="column-label">Potential Assumption</h4>
+    <div className="items-box">
+      {/* ... list of assumptions ... */}
+    </div>
+  </div>
+</div>
+```
+
+## 2. Update `globals.css`
+
+I will add the following CSS to `frontend/src/app/globals.css` to style the new structure.
+
+```css
+.cause-assumption-section {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.cause-column, .assumption-column {
+  width: 48%;
+  text-align: center;
+}
+
+.column-label {
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+
+.items-box {
+  border: 1px solid #ccc;
+  padding: 10px;
+  min-height: 100px;
+}
+```
+
+## 3. Modify `SessionCard.tsx`
+
+I will apply the following changes to `frontend/src/components/SessionCard.tsx`:
+
+-   Remove the existing "Issue Tree" and "Assumptions" sections.
+-   Add the new two-column layout.
+-   Map over `session.issue_tree.sub_causes` for the "Contributing Cause" list.
+-   Map over `session.assumptions` for the "Potential Assumption" list.
+
+This will result in the desired layout with the labels outside the bordered boxes.
