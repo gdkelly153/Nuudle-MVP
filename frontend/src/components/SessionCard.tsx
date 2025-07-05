@@ -4,7 +4,7 @@ import { useSummaryDownloader, type SessionData, type SummaryData } from "@/hook
 
 interface SessionProps {
   session: {
-    id: number;
+    _id: string;
     created_at: string;
     pain_point: string;
     issue_tree: {
@@ -20,9 +20,11 @@ interface SessionProps {
     summary_header?: string;
   };
   onViewSummary: (session: SessionProps['session']) => void;
+  onDelete: (session: SessionProps['session']) => void;
+  isDeleting?: boolean;
 }
 
-const SessionCard: React.FC<SessionProps> = ({ session, onViewSummary }) => {
+const SessionCard: React.FC<SessionProps> = ({ session, onViewSummary, onDelete, isDeleting = false }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const summaryDownloader = useSummaryDownloader();
 
@@ -41,7 +43,7 @@ const SessionCard: React.FC<SessionProps> = ({ session, onViewSummary }) => {
     if (session.ai_summary && !summaryDownloader.summaryData) {
       // Use saved AI summary
       summaryDownloader.setSummaryData(session.ai_summary);
-      await summaryDownloader.downloadAsPDF(`session_${session.id}`);
+      await summaryDownloader.downloadAsPDF(`session_${session._id}`);
     } else if (!summaryDownloader.summaryData) {
       // Fallback: Generate summary for old sessions without saved summaries
       setIsGenerating(true);
@@ -55,14 +57,14 @@ const SessionCard: React.FC<SessionProps> = ({ session, onViewSummary }) => {
         action_plan: session.action_plan,
       };
       
-      const summary = await summaryDownloader.generateSummary(`session_${session.id}`, sessionData);
+      const summary = await summaryDownloader.generateSummary(`session_${session._id}`, sessionData);
       setIsGenerating(false);
       
       if (summary) {
-        await summaryDownloader.downloadAsPDF(`session_${session.id}`);
+        await summaryDownloader.downloadAsPDF(`session_${session._id}`);
       }
     } else {
-      await summaryDownloader.downloadAsPDF(`session_${session.id}`);
+      await summaryDownloader.downloadAsPDF(`session_${session._id}`);
     }
   };
 
@@ -73,7 +75,7 @@ const SessionCard: React.FC<SessionProps> = ({ session, onViewSummary }) => {
     if (session.ai_summary && !summaryDownloader.summaryData) {
       // Use saved AI summary
       summaryDownloader.setSummaryData(session.ai_summary);
-      await summaryDownloader.saveAsImage(`session_${session.id}`);
+      await summaryDownloader.saveAsImage(`session_${session._id}`);
     } else if (!summaryDownloader.summaryData) {
       // Fallback: Generate summary for old sessions without saved summaries
       setIsGenerating(true);
@@ -87,19 +89,25 @@ const SessionCard: React.FC<SessionProps> = ({ session, onViewSummary }) => {
         action_plan: session.action_plan,
       };
       
-      const summary = await summaryDownloader.generateSummary(`session_${session.id}`, sessionData);
+      const summary = await summaryDownloader.generateSummary(`session_${session._id}`, sessionData);
       setIsGenerating(false);
       
       if (summary) {
-        await summaryDownloader.saveAsImage(`session_${session.id}`);
+        await summaryDownloader.saveAsImage(`session_${session._id}`);
       }
     } else {
-      await summaryDownloader.saveAsImage(`session_${session.id}`);
+      await summaryDownloader.saveAsImage(`session_${session._id}`);
     }
   };
 
+  const handleDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDelete(session);
+  };
+
   return (
-    <div className="session-card-compact">
+    <div className={`session-card-compact ${isDeleting ? 'session-card-deleting' : ''}`}>
       <div className="session-card-header">
         {session.summary_header && (
           <h3 className="session-summary-header">
@@ -153,6 +161,13 @@ const SessionCard: React.FC<SessionProps> = ({ session, onViewSummary }) => {
           title="Save as Image"
         >
           {(isGenerating || summaryDownloader.generatingSummary) ? "Generating..." : "Save as Image"}
+        </button>
+        <button
+          onClick={handleDelete}
+          className="action-button-compact delete-button-compact"
+          title="Delete Session"
+        >
+          Delete
         </button>
       </div>
     </div>

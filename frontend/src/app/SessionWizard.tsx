@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import Tooltip from "@/components/Tooltip";
 import { CheckCircle, Check } from "lucide-react";
@@ -26,7 +26,6 @@ export default function SessionWizard() {
   const [step, setStep] = useState(0);
   const [causes, setCauses] = useState([{ cause: "", assumption: "" }]);
   const [solutions, setSolutions] = useState<{ [id: string]: string }>({});
-  const [actionableItems, setActionableItems] = useState<ActionableItem[]>([]);
   const [highlightedContainerId, setHighlightedContainerId] = useState<string | null>(null);
   const [openActionBoxIds, setOpenActionBoxIds] = useState<string[]>([]);
   const [perpetuations, setPerpetuations] = useState<{ id: number; text: string }[]>([{ id: 1, text: "" }]);
@@ -39,11 +38,9 @@ export default function SessionWizard() {
   const [actionPlan, setActionPlan] = useState<{
     selectedActionIds: string[];
     otherActionText: string;
-    elaborationTexts: { [actionId: string]: string };
   }>({
     selectedActionIds: [],
     otherActionText: "",
-    elaborationTexts: {},
   });
   const [sessionId, setSessionId] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,6 +49,17 @@ export default function SessionWizard() {
   
   // New state for summary modal
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  
+  // AI interaction logging for adaptive feedback
+  const [aiInteractionLog, setAiInteractionLog] = useState<Array<{
+    stage: string;
+    userInputBefore: string;
+    aiResponse: string;
+  }>>([]);
+  
+  // Summary caching state
+  const [cachedSessionData, setCachedSessionData] = useState<SessionData | null>(null);
+  const [cachedSummary, setCachedSummary] = useState<any>(null);
   
   // Use the summary downloader hook
   const summaryDownloader = useSummaryDownloader();
@@ -143,18 +151,16 @@ export default function SessionWizard() {
           const actionPlanData = decodeURIComponent(actionPlanParam);
           if (actionPlanData.includes(':')) {
             // If it contains a colon, it's a selected action with elaboration
-            const [actionText, elaboration] = actionPlanData.split(': ');
+            const [actionText] = actionPlanData.split(': ');
             setActionPlan({
               selectedActionIds: ['cause-0'], // Default to first action
-              otherActionText: '',
-              elaborationTexts: { 'cause-0': elaboration }
+              otherActionText: ''
             });
           } else {
             // It's a custom action
             setActionPlan({
               selectedActionIds: ['other'],
-              otherActionText: actionPlanData,
-              elaborationTexts: {}
+              otherActionText: actionPlanData
             });
           }
         }
@@ -167,28 +173,55 @@ export default function SessionWizard() {
     }
   }, [searchParams]);
 
-  const ai = useAIAssistant(sessionId);
+  // Function to log AI interactions for adaptive feedback
+  const logAIInteraction = (stage: string, userInputBefore: string, aiResponse: string) => {
+    setAiInteractionLog(prev => [...prev, {
+      stage,
+      userInputBefore,
+      aiResponse
+    }]);
+  };
+
+  const ai = useAIAssistant(sessionId, logAIInteraction);
 
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const headerRefs = useRef<(HTMLHeadingElement | null)[]>([]);
   const painPointTextareaRef = useRef<HTMLTextAreaElement>(null);
   const causeTextAreaRefs = useRef<Array<[HTMLTextAreaElement | null, HTMLTextAreaElement | null]>>([]);
   const readOnlyCauseTextAreaRefs = useRef<Array<[HTMLTextAreaElement | null, HTMLTextAreaElement | null]>>([]);
   const perpetuationsTextareaRefs = useRef<Array<HTMLTextAreaElement | null>>([]);
   const solutionTextareaRefs = useRef<Map<string, HTMLTextAreaElement | null>>(new Map());
   const fearTextareaRefs = useRef<Map<string, { name: HTMLTextAreaElement | null; mitigation: HTMLTextAreaElement | null; contingency: HTMLTextAreaElement | null; }>>(new Map());
-  const actionPlanTextareaRefs = useRef<Map<string, HTMLTextAreaElement | null>>(new Map());
   const otherActionTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  
 
   useEffect(() => {
-    if (stepRefs.current[step]) {
-      stepRefs.current[step]?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    }
     ai.dismissResponse();
   }, [step]);
+
+  // Calculate actionableItems directly during render to avoid layout shifts
+  const actionableItems = useMemo(() => {
+    if (step === 3) {
+      const causeItems: ActionableItem[] = causes
+        .filter(c => c.cause.trim() !== "")
+        .map((c, index) => ({
+          id: `cause-${index}`,
+          cause: c.cause,
+          assumption: c.assumption,
+        }));
+
+      const perpetuationItems: ActionableItem[] = perpetuations
+        .filter(p => selectedPerpetuations.includes(String(p.id)))
+        .map(p => ({
+          id: `perp-${p.id}`,
+          cause: p.text,
+        }));
+
+      return [...causeItems, ...perpetuationItems];
+    }
+    return [];
+  }, [step, causes, perpetuations, selectedPerpetuations]);
 
 useLayoutEffect(() => {
   const adjustTextareaHeight = (textarea: HTMLTextAreaElement) => {
@@ -219,6 +252,41 @@ useLayoutEffect(() => {
   syncPairs(causeTextAreaRefs.current);
   syncPairs(readOnlyCauseTextAreaRefs.current);
 }, [step, causes, perpetuations, solutions, fears, actionPlan, step2Phase, actionableItems]);
+
+// Scroll to position header at 20vh from top when step changes
+useEffect(() => {
+  if (!headerRefs.current[step]) return;
+
+  // Small delay to ensure layout is ready
+  const timeoutId = setTimeout(() => {
+    const header = headerRefs.current[step];
+    if (!header) return;
+
+    // Calculate the desired position: 20vh from the top of the viewport
+    const desiredTopPosition = window.innerHeight * 0.2;
+    
+    // Get the header's current position relative to the viewport
+    const headerRect = header.getBoundingClientRect();
+    const currentTopPosition = headerRect.top;
+    
+    // Calculate how much we need to scroll to get the header to the desired position
+    const scrollOffset = currentTopPosition - desiredTopPosition;
+    
+    // Calculate the final scroll position
+    const finalScrollPosition = window.scrollY + scrollOffset;
+    
+    // Scroll to the calculated position
+    window.scrollTo({
+      top: finalScrollPosition,
+      behavior: "smooth"
+    });
+  }, 100);
+
+  // Cleanup
+  return () => {
+    clearTimeout(timeoutId);
+  };
+}, [step]);
 
 // Handle browser back-forward cache to reset textarea heights
 useEffect(() => {
@@ -260,26 +328,6 @@ useEffect(() => {
   };
 }, []);
 
-  useEffect(() => {
-    if (step === 3) {
-      const causeItems: ActionableItem[] = causes
-        .filter(c => c.cause.trim() !== "")
-        .map((c, index) => ({
-          id: `cause-${index}`,
-          cause: c.cause,
-          assumption: c.assumption,
-        }));
-
-      const perpetuationItems: ActionableItem[] = perpetuations
-        .filter(p => selectedPerpetuations.includes(String(p.id)))
-        .map(p => ({
-          id: `perp-${p.id}`,
-          cause: p.text,
-        }));
-
-      setActionableItems([...causeItems, ...perpetuationItems]);
-    }
-  }, [step, causes, perpetuations, selectedPerpetuations]);
 
   useEffect(() => {
     if (notWorried) {
@@ -505,8 +553,7 @@ useEffect(() => {
       ...prev,
       selectedActionIds: prev.selectedActionIds.includes(actionId)
         ? prev.selectedActionIds.filter(id => id !== actionId)
-        : [...prev.selectedActionIds, actionId],
-      otherActionText: ""
+        : [...prev.selectedActionIds.filter(id => id !== "other"), actionId]
     }));
   };
 
@@ -518,15 +565,13 @@ useEffect(() => {
     }));
   };
 
-  const handleElaborationChange = (actionId: string, text: string) => {
+  const handleOtherActionFocus = () => {
     setActionPlan(prev => ({
       ...prev,
-      elaborationTexts: {
-        ...prev.elaborationTexts,
-        [actionId]: text,
-      }
+      selectedActionIds: prev.otherActionText.trim() ? ["other"] : []
     }));
   };
+
 
   const handleBack = () => {
     prevStep();
@@ -552,13 +597,28 @@ useEffect(() => {
     proceedAction();
   };
 
+  // Helper function to compare session data for caching
+  const sessionDataEquals = (data1: SessionData | null, data2: SessionData): boolean => {
+    if (!data1) return false;
+    
+    return (
+      data1.pain_point === data2.pain_point &&
+      JSON.stringify(data1.causes) === JSON.stringify(data2.causes) &&
+      JSON.stringify(data1.assumptions) === JSON.stringify(data2.assumptions) &&
+      JSON.stringify(data1.perpetuations) === JSON.stringify(data2.perpetuations) &&
+      JSON.stringify(data1.solutions) === JSON.stringify(data2.solutions) &&
+      JSON.stringify(data1.fears) === JSON.stringify(data2.fears) &&
+      data1.action_plan === data2.action_plan
+    );
+  };
+
   const handleSubmit = async () => {
-    // Instead of saving immediately, generate summary first
+    // Build current session data
     const filteredCauses = causes.filter(
       (c) => c.cause.trim() !== "" || (c.assumption && c.assumption.trim() !== "")
     );
 
-    const sessionData: SessionData = {
+    const currentSessionData: SessionData = {
       pain_point: painPoint,
       causes: filteredCauses.map((c) => c.cause),
       assumptions: filteredCauses.map((c) => c.assumption || ""),
@@ -575,17 +635,25 @@ useEffect(() => {
           : actionPlan.selectedActionIds.length > 0
           ? actionPlan.selectedActionIds
               .filter(id => id !== "other")
-              .map(id => {
-                const action = solutions[id] || "";
-                const elaboration = actionPlan.elaborationTexts[id] || "";
-                return elaboration ? `${action}: ${elaboration}` : action;
-              })
+              .map(id => solutions[id] || "")
               .join("; ")
           : "",
     };
 
-    const summary = await summaryDownloader.generateSummary(sessionId, sessionData);
+    // Check if session data has changed since last summary generation
+    if (sessionDataEquals(cachedSessionData, currentSessionData) && cachedSummary) {
+      // Use cached summary
+      summaryDownloader.summaryData = cachedSummary;
+      setShowSummaryModal(true);
+      return;
+    }
+
+    // Generate new summary
+    const summary = await summaryDownloader.generateSummary(sessionId, currentSessionData, aiInteractionLog);
     if (summary) {
+      // Cache the session data and summary
+      setCachedSessionData(currentSessionData);
+      setCachedSummary(summaryDownloader.summaryData);
       setShowSummaryModal(true);
     } else if (summaryDownloader.error) {
       setSubmitError(summaryDownloader.error);
@@ -618,11 +686,7 @@ useEffect(() => {
             : actionPlan.selectedActionIds.length > 0
             ? actionPlan.selectedActionIds
                 .filter(id => id !== "other")
-                .map(id => {
-                  const action = solutions[id] || "";
-                  const elaboration = actionPlan.elaborationTexts[id] || "";
-                  return elaboration ? `${action}: ${elaboration}` : action;
-                })
+                .map(id => solutions[id] || "")
                 .join("; ")
             : "",
         ai_summary: summaryDownloader.summaryData || null,
@@ -630,11 +694,12 @@ useEffect(() => {
 
       console.log("Saving session data:", sessionData);
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/sessions`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sessions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: 'include', // Include cookies for authentication
         body: JSON.stringify(sessionData),
       });
 
@@ -661,12 +726,43 @@ useEffect(() => {
     }
   };
 
-  const returnToSession = () => {
+  const closeSummaryModal = () => {
+    // Build current session data for caching consistency
+    const filteredCauses = causes.filter(
+      (c) => c.cause.trim() !== "" || (c.assumption && c.assumption.trim() !== "")
+    );
+
+    const currentSessionData: SessionData = {
+      pain_point: painPoint,
+      causes: filteredCauses.map((c) => c.cause),
+      assumptions: filteredCauses.map((c) => c.assumption || ""),
+      perpetuations: perpetuations
+        .map((p) => p.text)
+        .filter((perpetuation) => perpetuation.trim() !== ""),
+      solutions: Object.values(solutions).filter((solution) => solution.trim() !== ""),
+      fears: Object.values(fears).filter(
+        (fear) => fear.name.trim() !== "" || fear.mitigation.trim() !== "" || fear.contingency.trim() !== ""
+      ),
+      action_plan:
+        actionPlan.selectedActionIds.includes("other")
+          ? actionPlan.otherActionText
+          : actionPlan.selectedActionIds.length > 0
+          ? actionPlan.selectedActionIds
+              .filter(id => id !== "other")
+              .map(id => solutions[id] || "")
+              .join("; ")
+          : "",
+    };
+
+    // Cache the session data and summary for consistency
+    setCachedSessionData(currentSessionData);
+    setCachedSummary(summaryDownloader.summaryData);
+    
     setShowSummaryModal(false);
   };
 
-  const closeSummaryModal = () => {
-    setShowSummaryModal(false);
+  const returnToSession = () => {
+    closeSummaryModal();
   };
 
   const downloadAsPDF = async () => {
@@ -757,7 +853,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
         <div className="content-wrapper" ref={contentWrapperRef}>
         {/* Step 0: Problem Articulation */}
         <div className={getStepClass(0)} ref={(el) => { stepRefs.current[0] = el; }}>
-          <h1>Nuudle</h1>
+          <h1 ref={(el) => { headerRefs.current[0] = el; }}>Nuudle</h1>
           <h2 className="subheader">Mind Matters</h2>
           <div className="form-content initial-form-content">
             <div className="input-group">
@@ -815,7 +911,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
 
         {/* Step 1: Contributing Causes */}
         <div className={getStepClass(1)} ref={(el) => { stepRefs.current[1] = el; }}>
-          <h1>Why do you think this problem is happening?</h1>
+          <h1 ref={(el) => { headerRefs.current[1] = el; }}>Why do you think this problem is happening?</h1>
           <div className="form-content initial-form-content">
             <div className="input-group">
               <label className="step-description">
@@ -919,7 +1015,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
           {ai.currentResponse && step === 1 && (
             <AIResponseCard
               response={ai.currentResponse}
-              stage="root_cause"
+              stage={ai.lastAttemptedStage || ai.loadingStage || "root_cause"}
               onDismiss={ai.dismissResponse}
               onFeedback={ai.provideFeedback}
               canFollowUp={ai.canUseAI}
@@ -931,7 +1027,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
         <div className={getStepClass(2)} ref={(el) => { stepRefs.current[2] = el; }}>
           {step2Phase === "input" ? (
             <>
-              <h1>If you were to perpetuate the problem, what actions could you take?</h1>
+              <h1 ref={(el) => { headerRefs.current[2] = el; }}>If you were to perpetuate the problem, what actions could you take?</h1>
               <p className="step-description">Reflecting on these potential actions helps to uncover the behaviors and patterns that keep the problem in place, which is a crucial step towards solving it. If I wanted to make sure this problem continued, I would...</p>
               <div className="form-content initial-form-content">
                 <div className="input-group">
@@ -1006,7 +1102,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
             </>
           ) : (
             <>
-              <h1>What's your role?</h1>
+              <h1 ref={(el) => { headerRefs.current[2] = el; }}>What's your role?</h1>
               <p className="step-description">Our problems rarely exist completely outside of ourselves. We often have a role to play. Try your best to be honest about yours. Click every action that you think might be actively contributing to the problem.</p>
               <div className="form-content initial-form-content">
                 <div className="items-container">
@@ -1035,6 +1131,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                         className={`auto-resizing-textarea read-only-textarea ${selectedPerpetuations.includes(String(perpetuation.id)) ? "selected" : ""}`}
                         style={{
                           paddingLeft: '40px',
+                          paddingRight: '40px',
                           cursor: 'pointer'
                         }}
                         rows={1}
@@ -1079,7 +1176,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
 
         {/* Step 3: Solutions */}
         <div className={getStepClass(3)} ref={(el) => { stepRefs.current[3] = el; }}>
-          <h1>What can you do about it?</h1>
+          <h1 ref={(el) => { headerRefs.current[3] = el; }}>What can you do about it?</h1>
           <div className="form-content initial-form-content">
             <div className="input-group">
               <label className="step-description">
@@ -1245,7 +1342,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
 
         {/* Step 4: Fears */}
         <div className={getStepClass(4)} ref={(el) => { stepRefs.current[4] = el; }}>
-          <h1>What worries you?</h1>
+          <h1 ref={(el) => { headerRefs.current[4] = el; }}>What worries you?</h1>
           <p className="step-description">Select each action that you're hesitant about taking, then complete the fear, mitigation, and contingency prompts to build your confidence.</p>
           <div className="form-content initial-form-content">
             <div className="items-container">
@@ -1363,7 +1460,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
 
         {/* Step 5: Action Plan */}
         <div className={getStepClass(5)} ref={(el) => { stepRefs.current[5] = el; }}>
-          <h1>Stop Nuudling. Start Doodling.</h1>
+          <h1 ref={(el) => { headerRefs.current[5] = el; }}>Question &gt; Understand &gt; <span style={{ color: 'var(--refined-balance-teal)' }}>Act</span></h1>
           <div className="form-content initial-form-content">
             <div className="input-group">
               <label className="step-description mb-4">The most important step is always the next one. Choose yours.</label>
@@ -1373,20 +1470,27 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                     <div
                       className={`selectable-box ${actionPlan.selectedActionIds.includes(id) ? "selected" : ""}`}
                       onClick={() => handleActionSelection(id)}
+                      style={{
+                        position: 'relative',
+                        cursor: 'pointer',
+                        paddingLeft: '40px',
+                        paddingRight: '40px'
+                      }}
                     >
+                      {actionPlan.selectedActionIds.includes(id) && (
+                        <Check
+                          className="w-5 h-5 text-progress-complete"
+                          style={{
+                            position: 'absolute',
+                            left: '8px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            zIndex: 1
+                          }}
+                        />
+                      )}
                       {action}
                     </div>
-                    {actionPlan.selectedActionIds.includes(id) && (
-                      <textarea
-                        ref={el => { actionPlanTextareaRefs.current.set(id, el); }}
-                        value={actionPlan.elaborationTexts[id] || ""}
-                        onChange={(e) => handleElaborationChange(id, e.target.value)}
-                        onInput={(e) => syncTextareaHeights(e)}
-                        className="auto-resizing-textarea"
-                        placeholder="Optional Nuudling space if you'd like to elaborate."
-                        disabled={step !== 5}
-                      />
-                    )}
                   </div>
                 ))}
                 <div>
@@ -1395,9 +1499,13 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                     value={actionPlan.otherActionText}
                     onChange={(e) => handleOtherActionChange(e.target.value)}
                     onInput={(e) => syncTextareaHeights(e)}
+                    onFocus={handleOtherActionFocus}
                     className="auto-resizing-textarea"
-                    placeholder="Something else..."
+                    placeholder="None of the above, I'd rather..."
                     disabled={step !== 5}
+                    style={{
+                      opacity: actionPlan.selectedActionIds.includes("other") || actionPlan.otherActionText.trim() === "" ? 1 : 0.5
+                    }}
                   />
                 </div>
               </div>
@@ -1512,7 +1620,6 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                 onClick={saveToHistory}
                 disabled={isSubmitting || sessionSaved}
                 className="action-button"
-                style={{ backgroundColor: '#28a745', borderColor: '#28a745' }}
               >
                 {isSubmitting ? "Saving..." : sessionSaved ? "Saved!" : "Save to my history"}
               </button>
@@ -1520,7 +1627,6 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                 type="button"
                 onClick={returnToSession}
                 className="action-button"
-                style={{ backgroundColor: '#6c757d', borderColor: '#6c757d' }}
               >
                 Return to Session
               </button>

@@ -131,7 +131,7 @@ export const AIAssistButton: React.FC<AIComponentProps & {
   );
 };
 
-// AI Response Card Component  
+// AI Response Card Component
 export const AIResponseCard: React.FC<{
   response: string;
   stage: string;
@@ -140,100 +140,99 @@ export const AIResponseCard: React.FC<{
   onFeedback: (helpful: boolean) => void;
   canFollowUp: boolean;
 }> = ({ response, stage, onDismiss, onFollowUp, onFeedback, canFollowUp }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
   const [feedbackGiven, setFeedbackGiven] = useState(false);
 
   const handleFeedback = (helpful: boolean) => {
     onFeedback(helpful);
     setFeedbackGiven(true);
-    
-    // Auto-dismiss after positive feedback
-    if (helpful) {
-      setTimeout(onDismiss, 1500);
-    }
+    // Remove auto-dismiss - card stays open after feedback
   };
+
+  // Stage-specific titles - use "Nuudle AI" for initial problem articulation, others keep their specific titles
+  const stageTitle = {
+    problem_articulation_direct: 'Nuudle AI',
+    problem_articulation_intervention: 'Nuudle AI',
+    problem_articulation_context_aware: 'Nuudle AI',
+    root_cause: 'Root Cause Analysis',
+    identify_assumptions: 'Challenging Narratives',
+    potential_actions: 'Action Exploration',
+    perpetuation: 'Pattern Recognition',
+    action_planning: 'Mitigations and Contingencies'
+  }[stage] || 'AI Assistance';
 
   return (
     <div
-      className={`
-        mt-4 bg-blue-50 border border-blue-200 rounded-lg transition-all duration-300
-        ${isExpanded ? '' : 'max-h-12 overflow-hidden'}
-      `}
+      className="ai-response-card-new entering"
       role="region"
       aria-label="AI assistance response"
     >
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 bg-blue-100">
-        <div className="flex items-baseline space-x-2">
-          <span className="text-sm font-medium text-blue-900">Nuddle AI</span>
-        </div>
-        
-        <div className="flex items-center space-x-1">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="p-1 text-blue-600 hover:text-blue-800 transition-colors"
-            aria-label={isExpanded ? 'Collapse response' : 'Expand response'}
-          >
-            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-          
-          <button
-            onClick={onDismiss}
-            className="p-1 text-blue-600 hover:text-blue-800 transition-colors"
-            aria-label="Dismiss AI response"
-          >
-            <X className="w-4 h-4" />
-          </button>
+      {/* Header - No brain icon */}
+      <div className="ai-response-header">
+        <h3 className="ai-response-header-title">{stageTitle}</h3>
+      </div>
+
+      {/* Body */}
+      <div className="ai-response-body">
+        <div className="ai-response-content">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {response}
+          </ReactMarkdown>
         </div>
       </div>
 
-      {/* Content */}
-      {isExpanded && (
-        <div className="p-4">
-          <div className="prose prose-sm max-w-none text-gray-800 leading-relaxed mb-4">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {response}
-            </ReactMarkdown>
-          </div>
-          
-          {/* Actions */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              {!feedbackGiven ? (
-                <>
-                  <button
-                    onClick={() => handleFeedback(true)}
-                    className="feedback-button inline-flex items-center px-3 py-1.5 text-xs font-medium text-green-700 bg-green-100 rounded-md hover:bg-green-200 transition-colors"
-                  >
-                    This helps
-                  </button>
-                  
-                  <button
-                    onClick={() => handleFeedback(false)}
-                    className="feedback-button inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-                  >
-                    Not helpful
-                  </button>
-                </>
-              ) : (
-                <div className="flex items-center text-xs text-progress-complete">
-                  <CheckCircle className="w-3 h-3 mr-1" />
-                  Thanks for your feedback!
-                </div>
-              )}
-            </div>
-            
-            {canFollowUp && onFollowUp && !feedbackGiven && (
+      {/* Footer */}
+      <div className="ai-response-footer">
+        <div className="ai-response-actions">
+          {!feedbackGiven ? (
+            <>
               <button
-                onClick={onFollowUp}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                onClick={() => handleFeedback(true)}
+                className="ai-response-feedback-btn positive"
+                title="Mark as helpful"
               >
-                Ask follow-up
+                <CheckCircle className="w-4 h-4 text-refined-balance-teal" />
+                Helpful
               </button>
-            )}
-          </div>
+              
+              <button
+                onClick={() => handleFeedback(false)}
+                className="ai-response-feedback-btn negative"
+                title="Mark as not helpful"
+              >
+                <X className="w-4 h-4 text-warm-brick" />
+                Not helpful
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center text-sm text-progress-complete">
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Thanks for your feedback!
+            </div>
+          )}
+          
+          {canFollowUp && onFollowUp && !feedbackGiven && (
+            <button
+              onClick={onFollowUp}
+              className="ai-response-feedback-btn"
+              title="Ask a follow-up question"
+            >
+              Ask follow-up
+            </button>
+          )}
         </div>
-      )}
+        
+        <div className="ai-response-meta">
+          <button
+            onClick={onDismiss}
+            className="ai-response-expand-btn"
+            aria-label="Dismiss AI response"
+            title="Dismiss this response"
+          >
+            <X className="w-4 h-4 text-warm-brick" />
+            Dismiss
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
@@ -329,9 +328,7 @@ export const SuggestedCause: React.FC<{
 };
 
 // Main AI Assistant Hook
-export const useAIAssistant = (sessionId: string) => {
-  // Hardcoded userId for now. In a real app, this would come from an auth context.
-  const userId = 'default-user';
+export const useAIAssistant = (sessionId: string, onInteractionLog?: (stage: string, userInput: string, aiResponse: string) => void) => {
   const [usage, setUsage] = useState<AIUsage>({
     dailyRequests: 0,
     dailyLimit: 10,
@@ -340,7 +337,8 @@ export const useAIAssistant = (sessionId: string) => {
   });
   const [isEnabled, setIsEnabled] = useState(true);
   const [loadingStage, setLoadingStage] = useState<string | null>(null);
-  const [responses, setResponses] = useState<{ [stage: string]: { response: string; interactionId: number } | null }>({});
+  const [lastAttemptedStage, setLastAttemptedStage] = useState<string | null>(null);
+  const [responses, setResponses] = useState<{ [stage: string]: { response: string; interactionId: number; userInput: any } | null }>({});
   const [activeStage, setActiveStage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -354,7 +352,9 @@ export const useAIAssistant = (sessionId: string) => {
   const fetchUsage = async () => {
     if (!sessionId) return;
     try {
-      const response = await fetch(`/api/ai/usage/${sessionId}?userId=${userId}`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ai/usage/${sessionId}`, {
+        credentials: 'include' // Include cookies for authentication
+      });
       if (response.ok) {
         const usageData = await response.json();
         setUsage(usageData);
@@ -371,17 +371,27 @@ export const useAIAssistant = (sessionId: string) => {
       return;
     }
 
+    // Check if we have a cached response for this stage with the same user input
+    const existingResponse = responses[stage];
+    if (existingResponse && JSON.stringify(existingResponse.userInput) === JSON.stringify(userInput)) {
+      // Same input, just show the existing response
+      setActiveStage(stage);
+      setError(null);
+      return;
+    }
+
     setLoadingStage(stage);
+    setLastAttemptedStage(stage);
     setError(null);
     
     try {
-      const response = await fetch('/api/ai/assist', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ai/assist`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include', // Include cookies for authentication
         body: JSON.stringify({
-          userId,
           sessionId,
           stage,
           userInput,
@@ -391,9 +401,14 @@ export const useAIAssistant = (sessionId: string) => {
 
       const data = await response.json();
       if (response.ok) {
-        setResponses(prev => ({ ...prev, [stage]: { response: data.response, interactionId: data.interactionId } }));
+        setResponses(prev => ({ ...prev, [stage]: { response: data.response, interactionId: data.interactionId, userInput } }));
         setActiveStage(stage);
         setUsage(data.usage);
+        
+        // Log the interaction for adaptive feedback
+        if (onInteractionLog) {
+          onInteractionLog(stage, userInput, data.response);
+        }
       } else {
         setError(data.error || 'AI assistance temporarily unavailable');
       }
@@ -412,11 +427,12 @@ export const useAIAssistant = (sessionId: string) => {
   const provideFeedback = async (helpful: boolean) => {
     if (!activeStage || !responses[activeStage]) return;
     try {
-      await fetch('/api/ai/feedback', {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ai/feedback`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include', // Include cookies for authentication
         body: JSON.stringify({
           sessionId,
           interactionId: responses[activeStage]?.interactionId,
@@ -433,6 +449,7 @@ export const useAIAssistant = (sessionId: string) => {
     isEnabled,
     setIsEnabled,
     loadingStage,
+    lastAttemptedStage,
     currentResponse: activeStage ? responses[activeStage]?.response ?? null : null,
     error,
     requestAssistance,

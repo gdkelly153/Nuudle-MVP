@@ -32,7 +32,7 @@ export const useSummaryDownloader = () => {
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const generateSummary = async (sessionId: string, sessionData: SessionData): Promise<SummaryData | null> => {
+  const generateSummary = async (sessionId: string, sessionData: SessionData, aiInteractionLog?: Array<{stage: string; userInputBefore: string; aiResponse: string}>): Promise<SummaryData | null> => {
     setGeneratingSummary(true);
     setError(null);
     
@@ -44,9 +44,11 @@ export const useSummaryDownloader = () => {
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: 'include', // Include cookies for authentication
         body: JSON.stringify({
           sessionId: sessionId,
           sessionData: sessionData,
+          aiInteractionLog: aiInteractionLog || [],
         }),
       });
 

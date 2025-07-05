@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from "react";
 import SessionCard from "@/components/SessionCard";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import { useSummaryDownloader, type SummaryData, type SessionData } from "@/hooks/useSummaryDownloader";
 
 interface Session {
-  id: number;
+  _id: string;
   created_at: string;
   pain_point: string;
   issue_tree: {
@@ -30,6 +31,10 @@ const HistoryPage = () => {
   const [selectedYear, setSelectedYear] = useState("");
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // Use the summary downloader hook
   const summaryDownloader = useSummaryDownloader();
@@ -38,8 +43,10 @@ const HistoryPage = () => {
     const fetchSessions = async () => {
       try {
         setLoading(true);
-        // Fetch from the Python backend (correct endpoint)
-        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/sessions`);
+        // Fetch from the authenticated API endpoint
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sessions`, {
+          credentials: 'include' // Include cookies for authentication
+        });
         if (response.ok) {
           const data = await response.json();
           setSessions(data);
@@ -117,7 +124,7 @@ const HistoryPage = () => {
         action_plan: session.action_plan,
       };
       
-      const summary = await summaryDownloader.generateSummary(`session_${session.id}`, sessionData);
+      const summary = await summaryDownloader.generateSummary(`session_${session._id}`, sessionData);
       if (summary) {
         setShowSummaryModal(true);
       }
@@ -131,14 +138,54 @@ const HistoryPage = () => {
 
   const downloadAsPDF = async () => {
     if (selectedSession) {
-      await summaryDownloader.downloadAsPDF(`session_${selectedSession.id}`);
+      await summaryDownloader.downloadAsPDF(`session_${selectedSession._id}`);
     }
   };
 
   const shareOnSocial = async () => {
     if (selectedSession) {
-      await summaryDownloader.saveAsImage(`session_${selectedSession.id}`);
+      await summaryDownloader.saveAsImage(`session_${selectedSession._id}`);
     }
+  };
+
+  const handleDeleteSession = (session: Session) => {
+    setSessionToDelete(session);
+    setDeletingSessionId(session._id);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!sessionToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sessions/${sessionToDelete._id}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        // Remove the session from the local state
+        setSessions(sessions.filter(session => session._id !== sessionToDelete._id));
+        setShowDeleteModal(false);
+        setSessionToDelete(null);
+        setDeletingSessionId(null);
+      } else {
+        console.error('Failed to delete session:', response.status);
+        // You could add error handling here
+      }
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      // You could add error handling here
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteModal(false);
+    setSessionToDelete(null);
+    setDeletingSessionId(null);
   };
 
   if (loading) {
@@ -161,7 +208,8 @@ const HistoryPage = () => {
   }
 
   return (
-    <div className="history-page-container">
+    <ProtectedRoute>
+      <div className="history-page-container">
       <div className="history-header">
         <h2>Session History</h2>
         <p className="history-subtitle">
@@ -234,7 +282,13 @@ const HistoryPage = () => {
               </div>
             ) : (
               filteredSessions.map((session) => (
-                <SessionCard key={session.id} session={session} onViewSummary={handleViewSummary} />
+                <SessionCard
+                  key={session._id}
+                  session={session}
+                  onViewSummary={handleViewSummary}
+                  onDelete={handleDeleteSession}
+                  isDeleting={deletingSessionId === session._id}
+                />
               ))
             )}
           </div>
@@ -335,7 +389,42 @@ const HistoryPage = () => {
           </div>
         </div>
       )}
-    </div>
+
+      {showDeleteModal && sessionToDelete && (
+        <div className="modal-overlay" onClick={cancelDelete}>
+          <div className="modal-content delete-modal-content" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="modal-close-button"
+              onClick={cancelDelete}
+              aria-label="Close modal"
+            >
+              ×
+            </button>
+            
+            <div className="delete-confirmation">
+              <p className="delete-confirmation-text">Are you sure you want to delete this session? This action cannot be undone.</p>
+              <div className="delete-actions">
+                <button
+                  onClick={cancelDelete}
+                  disabled={isDeleting}
+                  className="delete-modal-cancel-btn"
+                >
+                  No, Go Back
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  disabled={isDeleting}
+                  className="delete-modal-delete-btn"
+                >
+                  {isDeleting ? "Deleting..." : "Yes, Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      </div>
+    </ProtectedRoute>
   );
 };
 
