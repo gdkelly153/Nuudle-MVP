@@ -23,6 +23,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # CORS configuration - more secure for production
 origins = [
     "https://nuudle.ai",
+    "https://www.nuudle.ai",
     "http://localhost:3000",
     "http://127.0.0.1:3000"
 ]
