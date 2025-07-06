@@ -41,7 +41,7 @@ export default function RootLayout({
         <meta name="description" content="Mind Matters" />
         <meta property="og:title" content="Nuudle" />
         <meta property="og:description" content="Mind Matters" />
-        <meta property="og:image" content="/og-image.png" />
+        <meta property="og:image" content="/icon-512.svg" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <AuthProvider>
