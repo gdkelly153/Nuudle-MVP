@@ -191,7 +191,7 @@ const HistoryPage = () => {
   if (loading) {
     return (
       <div className="wizard-step-container">
-        <h2>Session History</h2>
+        <h2>Nuudle History</h2>
         <p>Loading your sessions...</p>
       </div>
     );
@@ -200,7 +200,7 @@ const HistoryPage = () => {
   if (error) {
     return (
       <div className="wizard-step-container">
-        <h2>Session History</h2>
+        <h2>Nuudle History</h2>
         <p className="error-message">{error}</p>
         <button onClick={() => window.location.reload()}>Try Again</button>
       </div>
@@ -211,7 +211,7 @@ const HistoryPage = () => {
     <ProtectedRoute>
       <div className="history-page-container">
       <div className="history-header">
-        <h2>Session History</h2>
+        <h2>Nuudle History</h2>
         <p className="history-subtitle">
           {sessions.length === 0
             ? "No sessions found. Complete your first Nuudle session to see it here!"

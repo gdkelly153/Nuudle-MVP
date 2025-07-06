@@ -128,14 +128,6 @@ const SessionCard: React.FC<SessionProps> = ({ session, onViewSummary, onDelete,
             </span>
           </div>
           
-          {getActionPlanText() && (
-            <div className="preview-item-compact">
-              <span className="preview-label">Action Plan:</span>
-              <span className="preview-text">
-                {getActionPlanText()}
-              </span>
-            </div>
-          )}
         </div>
       </div>
       

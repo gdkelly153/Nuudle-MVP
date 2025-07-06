@@ -597,6 +597,53 @@ useEffect(() => {
     proceedAction();
   };
 
+  // Helper function to clean up empty inputs before AI requests
+  const cleanupEmptyInputs = () => {
+    // Clean up causes
+    const filteredCauses = causes.filter((c) =>
+      c.cause.trim() !== "" || (c.assumption && c.assumption.trim() !== "")
+    );
+    if (filteredCauses.length !== causes.length) {
+      setCauses(filteredCauses.length > 0 ? filteredCauses : [{ cause: "", assumption: "" }]);
+    }
+
+    // Clean up perpetuations
+    const filteredPerpetuations = perpetuations.filter((p) => p.text.trim() !== "");
+    if (filteredPerpetuations.length !== perpetuations.length) {
+      setPerpetuations(filteredPerpetuations.length > 0 ? filteredPerpetuations : [{ id: 1, text: "" }]);
+    }
+
+    // Clean up solutions (remove empty action boxes)
+    const filteredSolutions = Object.fromEntries(
+      Object.entries(solutions).filter(([_, action]) => action.trim() !== "")
+    );
+    if (Object.keys(filteredSolutions).length !== Object.keys(solutions).length) {
+      setSolutions(filteredSolutions);
+      // Also update open action boxes to only include those with content
+      setOpenActionBoxIds(prev =>
+        prev.filter(id => filteredSolutions[id] && filteredSolutions[id].trim() !== "")
+      );
+    }
+
+    // Clean up fears (remove empty fear entries)
+    const filteredFears = Object.fromEntries(
+      Object.entries(fears).filter(([_, fear]) =>
+        fear.name.trim() !== "" || fear.mitigation.trim() !== "" || fear.contingency.trim() !== ""
+      )
+    );
+    if (Object.keys(filteredFears).length !== Object.keys(fears).length) {
+      setFears(filteredFears);
+      // Also update open fear sections to only include those with content
+      setOpenFearSections(prev =>
+        prev.filter(id => filteredFears[id] &&
+          (filteredFears[id].name.trim() !== "" ||
+           filteredFears[id].mitigation.trim() !== "" ||
+           filteredFears[id].contingency.trim() !== "")
+        )
+      );
+    }
+  };
+
   // Helper function to compare session data for caching
   const sessionDataEquals = (data1: SessionData | null, data2: SessionData): boolean => {
     if (!data1) return false;
@@ -670,6 +717,7 @@ useEffect(() => {
       );
 
       const sessionData = {
+        session_id: sessionId,
         pain_point: painPoint,
         causes: filteredCauses.map((c) => c.cause),
         assumptions: filteredCauses.map((c) => c.assumption || ""),
@@ -1423,7 +1471,9 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
               <AIAssistButton
                 stage="action_planning"
                 isLoading={ai.loadingStage === 'action_planning'}
-                onRequest={() => ai.requestAssistance("action_planning", Object.values(solutions).join(', '), { painPoint, causes, perpetuations: selectedPerpetuations, solutions, fears })}
+                onRequest={() => {
+                  ai.requestAssistance("action_planning", Object.values(solutions).join(', '), { painPoint, causes, perpetuations: selectedPerpetuations, solutions, fears });
+                }}
                 disabled={(Object.keys(fears).length === 0 && !notWorried) || !ai.canUseAI}
                 sessionId={sessionId}
                 context={{ solutions, fears }}
@@ -1460,7 +1510,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
 
         {/* Step 5: Action Plan */}
         <div className={getStepClass(5)} ref={(el) => { stepRefs.current[5] = el; }}>
-          <h1 ref={(el) => { headerRefs.current[5] = el; }}>Question &gt; Understand &gt; <span style={{ color: 'var(--refined-balance-teal)' }}>Act</span></h1>
+          <h1 ref={(el) => { headerRefs.current[5] = el; }}>Question. Understand. <span style={{ color: 'var(--refined-balance-teal)' }}>Act</span></h1>
           <div className="form-content initial-form-content">
             <div className="input-group">
               <label className="step-description mb-4">The most important step is always the next one. Choose yours.</label>
