@@ -11,13 +11,10 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  isSessionActive: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   checkAuthStatus: () => Promise<void>;
-  startSession: () => void;
-  endSession: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -37,7 +34,6 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSessionActive, setIsSessionActive] = useState(false);
 
   const isAuthenticated = !!user;
 
@@ -67,6 +63,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const login = async (email: string, password: string) => {
+    setIsLoading(true);
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`, {
         method: 'POST',
@@ -88,10 +85,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error) {
       console.error('Login error:', error);
       return { success: false, error: 'Network error. Please try again.' };
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const register = async (email: string, password: string) => {
+    setIsLoading(true);
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/register`, {
         method: 'POST',
@@ -113,10 +113,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error) {
       console.error('Registration error:', error);
       return { success: false, error: 'Network error. Please try again.' };
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const logout = async () => {
+    setIsLoading(true);
     try {
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/logout`, {
         method: 'POST',
@@ -126,17 +129,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('Logout error:', error);
     } finally {
       setUser(null);
-      setIsSessionActive(false); // End session when logging out
+      setIsLoading(false);
     }
   };
 
-  const startSession = () => {
-    setIsSessionActive(true);
-  };
-
-  const endSession = () => {
-    setIsSessionActive(false);
-  };
 
   useEffect(() => {
     checkAuthStatus();
@@ -146,13 +142,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user,
     isLoading,
     isAuthenticated,
-    isSessionActive,
     login,
     register,
     logout,
     checkAuthStatus,
-    startSession,
-    endSession,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
