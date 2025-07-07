@@ -3,8 +3,8 @@ import json
 import random
 from typing import Dict, List, Optional, Any
 from anthropic import Anthropic
-import sqlite3
 from datetime import datetime
+from database import get_database
 
 # Initialize Anthropic client
 anthropic = Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
@@ -177,8 +177,6 @@ The JSON structure should be as follows:
 
 Return ONLY the JSON object, no additional text or formatting."""
 }
-
-DATABASE = "nuudle.db"
 
 async def get_claude_response(prompt: str) -> Dict[str, Any]:
     """Get response from Claude API"""
@@ -360,45 +358,22 @@ def analyze_ai_interactions(ai_interaction_log: List[Dict], session_data: Dict) 
         "feedbackGrowth": feedback_growth
     }
 
-async def check_rate_limits(user_id: int, session_id: str, stage: str = None) -> Dict[str, Any]:
+async def check_rate_limits(user_id: str, session_id: str, stage: str = None) -> Dict[str, Any]:
     """Check rate limits for user - now per-button (per-stage) limits"""
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-    
-    # Create ai_interactions table if it doesn't exist
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS ai_interactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            session_id TEXT,
-            stage TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            input_tokens INTEGER,
-            output_tokens INTEGER,
-            cost_usd REAL
-        )
-    """)
+    db = get_database()
     
     # Count per-stage usage for this session
     stage_usage_by_stage = {}
-    cursor.execute("""
-        SELECT stage, COUNT(*) FROM ai_interactions
-        WHERE session_id = ?
-        GROUP BY stage
-    """, (session_id,))
-    stage_results = cursor.fetchall()
+    pipeline = [
+        {"$match": {"session_id": session_id}},
+        {"$group": {"_id": "$stage", "count": {"$sum": 1}}}
+    ]
     
-    for stage_name, count in stage_results:
-        stage_usage_by_stage[stage_name] = count
+    async for result in db.ai_interactions.aggregate(pipeline):
+        stage_usage_by_stage[result["_id"]] = result["count"]
     
     # Count total session requests for this session
-    cursor.execute("""
-        SELECT COUNT(*) FROM ai_interactions
-        WHERE session_id = ?
-    """, (session_id,))
-    session_usage = cursor.fetchone()[0]
-    
-    conn.close()
+    session_usage = await db.ai_interactions.count_documents({"session_id": session_id})
     
     # Set limits - 5 per button/stage, no daily limit
     stage_limit = 5
@@ -426,43 +401,25 @@ async def check_rate_limits(user_id: int, session_id: str, stage: str = None) ->
 
 async def log_ai_interaction(interaction_data: Dict[str, Any]) -> str:
     """Log AI interaction to database"""
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
+    db = get_database()
     
-    # Create ai_interactions table if it doesn't exist
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS ai_interactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            session_id TEXT,
-            stage TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            input_tokens INTEGER,
-            output_tokens INTEGER,
-            cost_usd REAL
-        )
-    """)
+    # Create interaction document
+    interaction_doc = {
+        "user_id": interaction_data["userId"],
+        "session_id": interaction_data["sessionId"],
+        "stage": interaction_data["stage"],
+        "created_at": datetime.utcnow(),
+        "input_tokens": interaction_data["inputTokens"],
+        "output_tokens": interaction_data["outputTokens"],
+        "cost_usd": interaction_data["costUsd"]
+    }
     
     # Insert the interaction
-    cursor.execute("""
-        INSERT INTO ai_interactions (user_id, session_id, stage, input_tokens, output_tokens, cost_usd)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (
-        interaction_data["userId"],
-        interaction_data["sessionId"],
-        interaction_data["stage"],
-        interaction_data["inputTokens"],
-        interaction_data["outputTokens"],
-        interaction_data["costUsd"]
-    ))
+    result = await db.ai_interactions.insert_one(interaction_doc)
     
-    interaction_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
-    
-    return str(interaction_id)
+    return str(result.inserted_id)
 
-async def get_ai_response(user_id: int, session_id: str, stage: str, user_input: str, session_context: Dict[str, Any]) -> Dict[str, Any]:
+async def get_ai_response(user_id: str, session_id: str, stage: str, user_input: str, session_context: Dict[str, Any]) -> Dict[str, Any]:
     """Get AI response for a given stage and context"""
     
     # Check rate limits for this specific stage
@@ -576,7 +533,7 @@ Your conversational response begins now:"""
             "usage": limits
         }
 
-async def get_ai_summary(user_id: int, session_id: str, session_data: Dict[str, Any], ai_interaction_log: List[Dict] = None) -> Dict[str, Any]:
+async def get_ai_summary(user_id: str, session_id: str, session_data: Dict[str, Any], ai_interaction_log: List[Dict] = None) -> Dict[str, Any]:
     """Get AI summary for a completed session"""
     if ai_interaction_log is None:
         ai_interaction_log = []

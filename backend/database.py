@@ -1,6 +1,10 @@
 import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from typing import Optional
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 class Database:
     client: Optional[AsyncIOMotorClient] = None
