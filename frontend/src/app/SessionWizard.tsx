@@ -184,6 +184,13 @@ export default function SessionWizard() {
 
   const ai = useAIAssistant(sessionId, logAIInteraction);
 
+  // Custom function that preserves AI responses while user edits text
+  const clearAIErrorsForStage = (stage: string) => {
+    // This function intentionally does nothing to preserve AI responses
+    // AI responses will only be cleared/replaced when user clicks AI button again
+    // This achieves the desired behavior: responses persist during text editing
+  };
+
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
   const headerRefs = useRef<(HTMLHeadingElement | null)[]>([]);
@@ -912,10 +919,8 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
     value={painPoint}
     onChange={(e) => {
       setPainPoint(e.target.value);
-      // Reset all possible problem articulation stages since we don't know which one will be used
-      ai.resetForStage('problem_articulation_direct');
-      ai.resetForStage('problem_articulation_intervention');
-      ai.resetForStage('problem_articulation_context_aware');
+      // Clear any errors but preserve AI responses
+      clearAIErrorsForStage('problem_articulation');
     }}
     onInput={(e) => syncTextareaHeights(e)}
     className="auto-resizing-textarea"
@@ -993,7 +998,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                             value={item.cause}
                             onChange={(e) => {
                               handleCauseChange(index, "cause", e.target.value);
-                              ai.resetForStage('root_cause');
+                              clearAIErrorsForStage('root_cause');
                             }}
                             onInput={(e) => syncTextareaHeights(e, index)}
                             className="auto-resizing-textarea"
@@ -1016,7 +1021,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                             value={item.assumption || ""}
                             onChange={(e) => {
                               handleCauseChange(index, "assumption", e.target.value);
-                              ai.resetForStage('identify_assumptions');
+                              clearAIErrorsForStage('identify_assumptions');
                             }}
                             onInput={(e) => syncTextareaHeights(e, index)}
                             className="auto-resizing-textarea"
@@ -1101,7 +1106,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                           value={perpetuation.text}
                           onChange={(e) => {
                             handlePerpetuationChange(perpetuation.id, e.target.value);
-                            ai.resetForStage('perpetuation');
+                            clearAIErrorsForStage('perpetuation');
                           }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
@@ -1293,7 +1298,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                             value={solutions[item.id]}
                             onChange={(e) => {
                               handleSolutionActionChange(item.id, e.target.value);
-                              ai.resetForStage('potential_actions');
+                              clearAIErrorsForStage('potential_actions');
                             }}
                             onInput={(e) => syncTextareaHeights(e)}
                             className="auto-resizing-textarea"
@@ -1334,7 +1339,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                               value={solutions[item.id]}
                               onChange={(e) => {
                                 handleSolutionActionChange(item.id, e.target.value);
-                                ai.resetForStage('potential_actions');
+                                clearAIErrorsForStage('potential_actions');
                               }}
                               onInput={(e) => syncTextareaHeights(e)}
                               className="auto-resizing-textarea"
@@ -1438,7 +1443,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                           value={fears[id]?.name || ""}
                           onChange={(e) => {
                             handleFearChange(id, "name", e.target.value);
-                            ai.resetForStage('action_planning');
+                            clearAIErrorsForStage('action_planning');
                           }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
@@ -1455,7 +1460,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                           value={fears[id].mitigation}
                           onChange={(e) => {
                             handleFearChange(id, "mitigation", e.target.value);
-                            ai.resetForStage('action_planning');
+                            clearAIErrorsForStage('action_planning');
                           }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
@@ -1472,7 +1477,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                           value={fears[id].contingency}
                           onChange={(e) => {
                             handleFearChange(id, "contingency", e.target.value);
-                            ai.resetForStage('action_planning');
+                            clearAIErrorsForStage('action_planning');
                           }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
