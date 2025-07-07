@@ -48,14 +48,29 @@ CLAUDE_API_KEY=your_claude_api_key_here
 ### 1. Set Up Persistent Disk (CRITICAL - Do this first!)
 Follow the "Persistent Disk Setup" instructions above.
 
-### 2. Set Environment Variables in Render Dashboard
+### 2. Update Start Command (CRITICAL)
+**You must update the Start Command in your Render dashboard:**
+
+1. Go to your Render dashboard
+2. Select your backend service
+3. Navigate to "Settings" tab
+4. Find the "Start Command" field
+5. **Replace the current command with:**
+   ```
+   cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+   ```
+6. **Save changes**
+
+**⚠️ IMPORTANT**: The `cd backend &&` part is critical because it ensures the application runs from the correct directory where it can find the database file.
+
+### 3. Set Environment Variables in Render Dashboard
 1. Go to your Render dashboard
 2. Select your backend service
 3. Navigate to "Environment" tab
 4. Add the `SECRET_KEY` variable with a secure value
 5. Save changes
 
-### 3. Deploy the Latest Changes
+### 4. Deploy the Latest Changes
 The latest commit includes:
 - ✅ **Persistent database storage** - Database now stored in `/var/data/nuudle.db`
 - ✅ Fixed SECRET_KEY to use environment variable
@@ -63,12 +78,13 @@ The latest commit includes:
 - ✅ Safe database table creation with `IF NOT EXISTS`
 - ✅ Automatic fallback for local development
 
-### 4. Verify Deployment
+### 5. Verify Deployment
 After deployment, test that:
 - Users can register and login
 - Sessions persist across server restarts
 - No data loss occurs during server sleep/wake cycles
 - Database file is created in `/var/data/nuudle.db`
+- No "unable to open database file" errors in logs
 
 ## How the Persistent Storage Fix Works
 
@@ -120,6 +136,17 @@ You can verify the fix works by:
 
 ## Troubleshooting
 
+### If you see "unable to open database file" error:
+**This is the most common deployment error.** The logs will show:
+```
+sqlite3.OperationalError: unable to open database file
+```
+
+**Solution:**
+1. **Update the Start Command** in Render dashboard to: `cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT`
+2. **Ensure persistent disk is mounted** at `/var/data`
+3. **Redeploy the service**
+
 ### If users still lose data:
 1. **Check persistent disk is properly mounted** at `/var/data`
 2. **Verify disk has sufficient space** (at least 100MB free)
@@ -130,5 +157,10 @@ You can verify the fix works by:
 1. **Verify persistent disk configuration** in Render dashboard
 2. **Check that mount path is exactly** `/var/data`
 3. **Ensure disk is attached to the correct service**
+4. **Confirm Start Command includes** `cd backend &&`
+
+### Common Start Command Issues:
+- ❌ **Wrong**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+- ✅ **Correct**: `cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT`
 
 The previous issue where users had to "recreate accounts with the same credentials" should now be **completely resolved** with proper persistent disk setup.
