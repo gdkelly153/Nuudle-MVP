@@ -159,6 +159,13 @@ def create_tables():
     for attempt in range(1, max_retries + 1):
         try:
             print(f"Database connection attempt {attempt}/{max_retries} - Path: {DATABASE}")
+            
+            # Ensure the database directory exists (critical for /var/data on cloud platforms)
+            db_dir = os.path.dirname(DATABASE)
+            if db_dir:  # Only create directory if DATABASE has a directory component
+                os.makedirs(db_dir, exist_ok=True)
+                print(f"Directory ensured: {db_dir}")
+            
             conn = sqlite3.connect(DATABASE)
             cursor = conn.cursor()
             
@@ -196,18 +203,20 @@ def create_tables():
             print(f"Database initialization successful on attempt {attempt}")
             return  # Success! Exit the function
             
-        except sqlite3.OperationalError as e:
-            if "unable to open database file" in str(e):
+        except (sqlite3.OperationalError, OSError, PermissionError) as e:
+            if ("unable to open database file" in str(e) or
+                "Permission denied" in str(e) or
+                "No such file or directory" in str(e)):
                 if attempt < max_retries:
-                    print(f"Database not ready (attempt {attempt}/{max_retries}). Persistent disk may still be mounting. Retrying in {retry_delay} seconds...")
+                    print(f"Database/directory not ready (attempt {attempt}/{max_retries}). Persistent disk may still be mounting. Retrying in {retry_delay} seconds...")
                     time.sleep(retry_delay)
                     continue
                 else:
                     print(f"FATAL: Database connection failed after {max_retries} attempts. Persistent disk may not be properly configured.")
                     raise Exception(f"Database initialization failed after {max_retries} attempts: {e}")
             else:
-                # Different SQLite error, don't retry
-                print(f"Database error (not connection-related): {e}")
+                # Different error, don't retry
+                print(f"Database/filesystem error (not connection-related): {e}")
                 raise
         except Exception as e:
             # Unexpected error, don't retry
