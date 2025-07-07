@@ -61,10 +61,6 @@ body {
   font-family: Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-/* Centered layout utility class for landing page */
-.centered-layout-container {
   display: flex;
   justify-content: center;
   align-items: center;
