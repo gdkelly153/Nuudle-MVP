@@ -87,6 +87,37 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
     }
   };
 
+  // Helper function to filter out empty values from context for meaningful comparison
+  const filterEmptyValues = (obj: any): any => {
+    if (Array.isArray(obj)) {
+      return obj
+        .map(item => filterEmptyValues(item))
+        .filter(item => {
+          if (typeof item === 'string') return item.trim() !== '';
+          if (typeof item === 'object' && item !== null) {
+            return Object.values(item).some(val =>
+              typeof val === 'string' ? val.trim() !== '' : val !== null && val !== undefined
+            );
+          }
+          return item !== null && item !== undefined;
+        });
+    }
+    
+    if (typeof obj === 'object' && obj !== null) {
+      const filtered: any = {};
+      for (const [key, value] of Object.entries(obj)) {
+        const filteredValue = filterEmptyValues(value);
+        if (typeof filteredValue === 'string' && filteredValue.trim() === '') continue;
+        if (Array.isArray(filteredValue) && filteredValue.length === 0) continue;
+        if (typeof filteredValue === 'object' && filteredValue !== null && Object.keys(filteredValue).length === 0) continue;
+        filtered[key] = filteredValue;
+      }
+      return filtered;
+    }
+    
+    return obj;
+  };
+
   const requestAssistance = async (stage: string, userInput: string, context: any) => {
     if (!sessionId) {
       return;
@@ -99,13 +130,19 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
       return;
     }
 
-    // Check if we have a cached response for this stage with the same user input
+    // Check if we have a cached response for this stage with substantively the same user input
     const existingResponse = responses[stage];
-    if (existingResponse && JSON.stringify(existingResponse.userInput) === JSON.stringify(userInput)) {
-      // Same input, just show the existing response
-      setActiveStage(stage);
-      setError(null);
-      return;
+    if (existingResponse) {
+      // Filter out empty values from both current and cached context for meaningful comparison
+      const currentFiltered = filterEmptyValues(context);
+      const cachedFiltered = filterEmptyValues(existingResponse.userInput);
+      
+      if (JSON.stringify(currentFiltered) === JSON.stringify(cachedFiltered)) {
+        // Same meaningful content, just show the existing response
+        setActiveStage(stage);
+        setError(null);
+        return;
+      }
     }
 
     setLoadingStage(stage);
@@ -129,13 +166,13 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
 
       const data = await response.json();
       if (response.ok) {
-        setResponses(prev => ({ 
-          ...prev, 
-          [stage]: { 
-            response: data.response, 
-            interactionId: data.interactionId, 
-            userInput 
-          } 
+        setResponses(prev => ({
+          ...prev,
+          [stage]: {
+            response: data.response,
+            interactionId: data.interactionId,
+            userInput: context // Store the context instead of userInput for better comparison
+          }
         }));
         setActiveStage(stage);
         setUsage(data.usage);
