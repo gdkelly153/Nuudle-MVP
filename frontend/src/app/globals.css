@@ -63,6 +63,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Centered layout utility class for landing page */
+.centered-layout-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}
+
 * {
   box-sizing: border-box;
 }

@@ -12,39 +12,40 @@ export default function Home() {
   // Show loading state while checking authentication
   if (isLoading) {
     return (
-      <div className="loading-container">
-        <div className="loading-spinner"></div>
-        <p>Loading...</p>
-        
-        <style jsx>{`
-          .loading-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            gap: 1rem;
-          }
+      <div className="centered-layout-container">
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>Loading...</p>
+          
+          <style jsx>{`
+            .loading-container {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              gap: 1rem;
+            }
 
-          .loading-spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid var(--border-light);
-            border-top: 4px solid var(--golden-mustard);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-          }
+            .loading-spinner {
+              width: 40px;
+              height: 40px;
+              border: 4px solid var(--border-light);
+              border-top: 4px solid var(--golden-mustard);
+              border-radius: 50%;
+              animation: spin 1s linear infinite;
+            }
 
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
 
-          p {
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-          }
-        `}</style>
+            p {
+              color: var(--text-secondary);
+              font-size: 0.875rem;
+            }
+          `}</style>
+        </div>
       </div>
     );
   }
@@ -53,31 +54,33 @@ export default function Home() {
   if (!isAuthenticated) {
     return (
       <>
-        <main className="wizard-container">
-          <div className="content-wrapper">
-            <div className="step-container active">
-              <h1>Nuudle</h1>
-              <h2 className="subheader">Mind Matters</h2>
-              <div className="form-content initial-form-content">
-                <div className="input-group">
-                  <p className="step-description">
-                    Welcome to Nuudle - your personal problem-solving companion.
-                    Sign in or create an account to save your sessions and track your progress.
-                  </p>
+        <div className="centered-layout-container">
+          <main className="wizard-container">
+            <div className="content-wrapper">
+              <div className="step-container active">
+                <h1>Nuudle</h1>
+                <h2 className="subheader">Mind Matters</h2>
+                <div className="form-content initial-form-content">
+                  <div className="input-group">
+                    <p className="step-description">
+                      Welcome to Nuudle - your personal problem-solving companion.
+                      Sign in or create an account to save your sessions and track your progress.
+                    </p>
+                  </div>
+                </div>
+                <div className="button-container">
+                  <button
+                    type="button"
+                    onClick={() => setShowAuthModal(true)}
+                    className="landing-button"
+                  >
+                    Get Started
+                  </button>
                 </div>
               </div>
-              <div className="button-container">
-                <button
-                  type="button"
-                  onClick={() => setShowAuthModal(true)}
-                  className="landing-button"
-                >
-                  Get Started
-                </button>
-              </div>
             </div>
-          </div>
-        </main>
+          </main>
+        </div>
         
         <AuthModal
           isOpen={showAuthModal}
