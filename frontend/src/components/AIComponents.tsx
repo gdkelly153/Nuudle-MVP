@@ -14,6 +14,8 @@ interface AIUsage {
   dailyLimit: number;
   sessionRequests: number;
   sessionLimit: number;
+  stageUsageByStage: { [stage: string]: number };
+  stageLimit: number;
 }
 
 interface AIResponse {
@@ -331,9 +333,11 @@ export const SuggestedCause: React.FC<{
 export const useAIAssistant = (sessionId: string, onInteractionLog?: (stage: string, userInput: string, aiResponse: string) => void) => {
   const [usage, setUsage] = useState<AIUsage>({
     dailyRequests: 0,
-    dailyLimit: 10,
+    dailyLimit: 999,
     sessionRequests: 0,
-    sessionLimit: 5
+    sessionLimit: 999,
+    stageUsageByStage: {},
+    stageLimit: 5
   });
   const [isEnabled, setIsEnabled] = useState(true);
   const [loadingStage, setLoadingStage] = useState<string | null>(null);
@@ -367,7 +371,14 @@ export const useAIAssistant = (sessionId: string, onInteractionLog?: (stage: str
   };
 
   const requestAssistance = async (stage: string, userInput: string, context: any) => {
-    if (!sessionId || usage.dailyRequests >= usage.dailyLimit || usage.sessionRequests >= usage.sessionLimit) {
+    if (!sessionId) {
+      return;
+    }
+
+    // Check per-button limits
+    const stageUsage = usage.stageUsageByStage[stage] || 0;
+    if (stageUsage >= usage.stageLimit) {
+      setError(`You've reached the limit for this button (${stageUsage}/${usage.stageLimit} uses). Other AI buttons are still available.`);
       return;
     }
 
@@ -444,6 +455,25 @@ export const useAIAssistant = (sessionId: string, onInteractionLog?: (stage: str
     }
   };
 
+  const resetForStage = (stage: string) => {
+    // Clear the cached response for this stage to allow new requests
+    setResponses(prev => ({ ...prev, [stage]: null }));
+    // Clear any active response if it's for this stage
+    if (activeStage === stage) {
+      setActiveStage(null);
+    }
+    // Clear any errors
+    setError(null);
+    // Clear loading stage if it matches
+    if (loadingStage === stage) {
+      setLoadingStage(null);
+    }
+    // Clear last attempted stage if it matches
+    if (lastAttemptedStage === stage) {
+      setLastAttemptedStage(null);
+    }
+  };
+
   return {
     usage,
     isEnabled,
@@ -455,6 +485,10 @@ export const useAIAssistant = (sessionId: string, onInteractionLog?: (stage: str
     requestAssistance,
     dismissResponse,
     provideFeedback,
-    canUseAI: usage.dailyRequests < usage.dailyLimit && usage.sessionRequests < usage.sessionLimit
+    resetForStage,
+    canUseAI: (stage: string) => {
+      const stageUsage = usage.stageUsageByStage[stage] || 0;
+      return stageUsage < usage.stageLimit;
+    }
   };
 };

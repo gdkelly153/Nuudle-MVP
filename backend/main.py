@@ -515,3 +515,30 @@ async def ai_summary(request: AISummaryRequest, current_request: Request):
     except Exception as e:
         print(f"Summary generation error: {e}")
         raise HTTPException(status_code=500, detail={"success": False, "error": "Internal Server Error"})
+
+@app.get("/api/ai/usage/{session_id}")
+async def get_ai_usage(session_id: str, current_request: Request):
+    """Get AI usage statistics for a session"""
+    # Get current user
+    current_user = get_current_user(current_request)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    try:
+        # Import the check_rate_limits function from ai_service
+        from ai_service import check_rate_limits
+        
+        usage_data = await check_rate_limits(current_user.id, session_id)
+        
+        return {
+            "dailyRequests": usage_data["dailyUsage"],
+            "dailyLimit": usage_data["dailyLimit"],
+            "sessionRequests": usage_data["sessionUsage"],
+            "sessionLimit": usage_data["sessionLimit"],
+            "stageUsageByStage": usage_data["stageUsageByStage"],
+            "stageLimit": usage_data["stageLimit"]
+        }
+        
+    except Exception as e:
+        print(f"Usage check error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get usage data")

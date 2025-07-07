@@ -360,33 +360,118 @@ def analyze_ai_interactions(ai_interaction_log: List[Dict], session_data: Dict) 
         "feedbackGrowth": feedback_growth
     }
 
-async def check_rate_limits(user_id: int, session_id: str) -> Dict[str, Any]:
-    """Check rate limits for user - simplified version for now"""
-    # For now, return that limits are allowed
-    # In a full implementation, this would check the database
+async def check_rate_limits(user_id: int, session_id: str, stage: str = None) -> Dict[str, Any]:
+    """Check rate limits for user - now per-button (per-stage) limits"""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    
+    # Create ai_interactions table if it doesn't exist
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ai_interactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            session_id TEXT,
+            stage TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            cost_usd REAL
+        )
+    """)
+    
+    # Count per-stage usage for this session
+    stage_usage_by_stage = {}
+    cursor.execute("""
+        SELECT stage, COUNT(*) FROM ai_interactions
+        WHERE session_id = ?
+        GROUP BY stage
+    """, (session_id,))
+    stage_results = cursor.fetchall()
+    
+    for stage_name, count in stage_results:
+        stage_usage_by_stage[stage_name] = count
+    
+    # Count total session requests for this session
+    cursor.execute("""
+        SELECT COUNT(*) FROM ai_interactions
+        WHERE session_id = ?
+    """, (session_id,))
+    session_usage = cursor.fetchone()[0]
+    
+    conn.close()
+    
+    # Set limits - 5 per button/stage, no daily limit
+    stage_limit = 5
+    
+    # Check if the specific stage is allowed (if stage is provided)
+    stage_allowed = True
+    stage_usage = 0
+    if stage:
+        stage_usage = stage_usage_by_stage.get(stage, 0)
+        stage_allowed = stage_usage < stage_limit
+    
     return {
-        "dailyAllowed": True,
-        "sessionAllowed": True,
+        "stageAllowed": stage_allowed,
+        "stageUsage": stage_usage,
+        "stageLimit": stage_limit,
+        "sessionUsage": session_usage,
+        "stageUsageByStage": stage_usage_by_stage,
+        # Keep these for backward compatibility with frontend
+        "dailyAllowed": True,  # No daily limits anymore
+        "sessionAllowed": True,  # No session limits anymore
         "dailyUsage": 0,
-        "sessionUsage": 0
+        "dailyLimit": 999,  # High number to indicate no limit
+        "sessionLimit": 999  # High number to indicate no limit
     }
 
 async def log_ai_interaction(interaction_data: Dict[str, Any]) -> str:
-    """Log AI interaction to database - simplified version for now"""
-    # For now, return a mock interaction ID
-    # In a full implementation, this would log to the database
-    return f"interaction_{datetime.now().timestamp()}"
+    """Log AI interaction to database"""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    
+    # Create ai_interactions table if it doesn't exist
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ai_interactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            session_id TEXT,
+            stage TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            cost_usd REAL
+        )
+    """)
+    
+    # Insert the interaction
+    cursor.execute("""
+        INSERT INTO ai_interactions (user_id, session_id, stage, input_tokens, output_tokens, cost_usd)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        interaction_data["userId"],
+        interaction_data["sessionId"],
+        interaction_data["stage"],
+        interaction_data["inputTokens"],
+        interaction_data["outputTokens"],
+        interaction_data["costUsd"]
+    ))
+    
+    interaction_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    
+    return str(interaction_id)
 
 async def get_ai_response(user_id: int, session_id: str, stage: str, user_input: str, session_context: Dict[str, Any]) -> Dict[str, Any]:
     """Get AI response for a given stage and context"""
     
-    # Check rate limits
-    limits = await check_rate_limits(user_id, session_id)
-    if not limits["dailyAllowed"] or not limits["sessionAllowed"]:
+    # Check rate limits for this specific stage
+    limits = await check_rate_limits(user_id, session_id, stage)
+    if not limits["stageAllowed"]:
         return {
             "success": False,
-            "error": "Rate limit reached.",
-            "fallback": "It looks like you've reached your AI usage limit for now. Continue with your own thinking—you've got this.",
+            "error": f"Rate limit reached for this button. You've used {limits['stageUsage']}/{limits['stageLimit']} requests for this type of assistance.",
+            "fallback": "You've reached the limit for this button. Continue with your own thinking—you've got this! Other AI buttons are still available.",
             "usage": limits
         }
 
@@ -496,12 +581,12 @@ async def get_ai_summary(user_id: int, session_id: str, session_data: Dict[str, 
     if ai_interaction_log is None:
         ai_interaction_log = []
         
-    limits = await check_rate_limits(user_id, session_id)
-    if not limits["dailyAllowed"] or not limits["sessionAllowed"]:
+    limits = await check_rate_limits(user_id, session_id, "session_summary")
+    if not limits["stageAllowed"]:
         return {
             "success": False,
-            "error": "Rate limit reached.",
-            "fallback": "It looks like you've reached your AI usage limit for now. You can still review your session data.",
+            "error": f"Rate limit reached for session summary. You've used {limits['stageUsage']}/{limits['stageLimit']} summary requests.",
+            "fallback": "You've reached the limit for AI summaries. You can still review your session data.",
             "usage": limits
         }
 

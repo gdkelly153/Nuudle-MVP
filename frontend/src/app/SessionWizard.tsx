@@ -910,7 +910,13 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
   <textarea
     ref={painPointTextareaRef}
     value={painPoint}
-    onChange={(e) => setPainPoint(e.target.value)}
+    onChange={(e) => {
+      setPainPoint(e.target.value);
+      // Reset all possible problem articulation stages since we don't know which one will be used
+      ai.resetForStage('problem_articulation_direct');
+      ai.resetForStage('problem_articulation_intervention');
+      ai.resetForStage('problem_articulation_context_aware');
+    }}
     onInput={(e) => syncTextareaHeights(e)}
     className="auto-resizing-textarea"
     placeholder="What problem would you like to work through today?"
@@ -933,7 +939,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                 }
               }}
               isLoading={ai.loadingStage === 'problem_articulation_direct' || ai.loadingStage === 'problem_articulation_intervention' || ai.loadingStage === 'problem_articulation_context_aware'}
-              disabled={!painPoint.trim() || !ai.canUseAI}
+              disabled={!painPoint.trim() || !ai.canUseAI('problem_articulation_direct')}
               currentStep={step}
               buttonStep={0}
             />
@@ -952,7 +958,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                      'problem_articulation_context_aware'}
               onDismiss={ai.dismissResponse}
               onFeedback={ai.provideFeedback}
-              canFollowUp={ai.canUseAI}
+              canFollowUp={ai.canUseAI('problem_articulation_direct')}
             />
           )}
         </div>
@@ -985,7 +991,10 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                               causeTextAreaRefs.current[index][0] = el;
                             }}
                             value={item.cause}
-                            onChange={(e) => handleCauseChange(index, "cause", e.target.value)}
+                            onChange={(e) => {
+                              handleCauseChange(index, "cause", e.target.value);
+                              ai.resetForStage('root_cause');
+                            }}
                             onInput={(e) => syncTextareaHeights(e, index)}
                             className="auto-resizing-textarea"
                             disabled={step !== 1}
@@ -1005,7 +1014,10 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                               causeTextAreaRefs.current[index][1] = el;
                             }}
                             value={item.assumption || ""}
-                            onChange={(e) => handleCauseChange(index, "assumption", e.target.value)}
+                            onChange={(e) => {
+                              handleCauseChange(index, "assumption", e.target.value);
+                              ai.resetForStage('identify_assumptions');
+                            }}
                             onInput={(e) => syncTextareaHeights(e, index)}
                             className="auto-resizing-textarea"
                             disabled={step !== 1}
@@ -1022,7 +1034,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                     stage="root_cause"
                     isLoading={ai.loadingStage === 'root_cause'}
                     onRequest={() => ai.requestAssistance("root_cause", causes.map(c => c.cause).join(', '), { painPoint, causes })}
-                    disabled={causes.filter(c => c.cause.trim()).length < 1 || !ai.canUseAI}
+                    disabled={causes.filter(c => c.cause.trim()).length < 1 || !ai.canUseAI('root_cause')}
                     sessionId={sessionId}
                     context={{ causes }}
                     currentStep={step}
@@ -1034,7 +1046,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                     stage="identify_assumptions"
                     isLoading={ai.loadingStage === 'identify_assumptions'}
                     onRequest={() => ai.requestAssistance("identify_assumptions", causes.map(c => c.assumption).join(', '), { painPoint, causes })}
-                    disabled={causes.filter(c => c.cause.trim()).length < 1 || !ai.canUseAI}
+                    disabled={causes.filter(c => c.cause.trim()).length < 1 || !ai.canUseAI('identify_assumptions')}
                     sessionId={sessionId}
                     context={{ painPoint, causes }}
                     currentStep={step}
@@ -1066,7 +1078,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
               stage={ai.lastAttemptedStage || ai.loadingStage || "root_cause"}
               onDismiss={ai.dismissResponse}
               onFeedback={ai.provideFeedback}
-              canFollowUp={ai.canUseAI}
+              canFollowUp={ai.canUseAI('root_cause')}
             />
           )}
         </div>
@@ -1087,7 +1099,10 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                             if (el) perpetuationsTextareaRefs.current[index] = el;
                           }}
                           value={perpetuation.text}
-                          onChange={(e) => handlePerpetuationChange(perpetuation.id, e.target.value)}
+                          onChange={(e) => {
+                            handlePerpetuationChange(perpetuation.id, e.target.value);
+                            ai.resetForStage('perpetuation');
+                          }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
                           disabled={step !== 2}
@@ -1106,7 +1121,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                     stage="perpetuation"
                     isLoading={ai.loadingStage === 'perpetuation'}
                     onRequest={() => ai.requestAssistance("perpetuation", perpetuations.map(p => p.text).join(', '), { painPoint, causes, perpetuations })}
-                    disabled={perpetuations.filter(p => p.text.trim()).length === 0 || !ai.canUseAI}
+                    disabled={perpetuations.filter(p => p.text.trim()).length === 0 || !ai.canUseAI('perpetuation')}
                     sessionId={sessionId}
                     context={{ perpetuations }}
                     currentStep={step}
@@ -1144,7 +1159,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                   stage="perpetuation"
                   onDismiss={ai.dismissResponse}
                   onFeedback={ai.provideFeedback}
-                  canFollowUp={ai.canUseAI}
+                  canFollowUp={ai.canUseAI('perpetuation')}
                 />
               )}
             </>
@@ -1276,7 +1291,10 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                           <textarea
                             ref={el => { solutionTextareaRefs.current.set(item.id, el); }}
                             value={solutions[item.id]}
-                            onChange={(e) => handleSolutionActionChange(item.id, e.target.value)}
+                            onChange={(e) => {
+                              handleSolutionActionChange(item.id, e.target.value);
+                              ai.resetForStage('potential_actions');
+                            }}
                             onInput={(e) => syncTextareaHeights(e)}
                             className="auto-resizing-textarea"
                             placeholder="Enter your action here"
@@ -1314,7 +1332,10 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                             <textarea
                               ref={el => { solutionTextareaRefs.current.set(item.id, el); }}
                               value={solutions[item.id]}
-                              onChange={(e) => handleSolutionActionChange(item.id, e.target.value)}
+                              onChange={(e) => {
+                                handleSolutionActionChange(item.id, e.target.value);
+                                ai.resetForStage('potential_actions');
+                              }}
                               onInput={(e) => syncTextareaHeights(e)}
                               className="auto-resizing-textarea"
                               placeholder="Enter your action here"
@@ -1344,7 +1365,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                   perpetuations: selectedPerpetuationTexts
                 });
               }}
-              disabled={Object.keys(solutions).length === 0 || !Object.values(solutions).some(action => action.trim() !== '') || !ai.canUseAI}
+              disabled={Object.keys(solutions).length === 0 || !Object.values(solutions).some(action => action.trim() !== '') || !ai.canUseAI('potential_actions')}
               sessionId={sessionId}
               context={{ painPoint, causes, solutions, perpetuations: selectedPerpetuations }}
               currentStep={step}
@@ -1383,7 +1404,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
               stage="potential_actions"
               onDismiss={ai.dismissResponse}
               onFeedback={ai.provideFeedback}
-              canFollowUp={ai.canUseAI}
+              canFollowUp={ai.canUseAI('potential_actions')}
             />
           )}
         </div>
@@ -1415,7 +1436,10 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                             fearTextareaRefs.current.set(id, { ...refs, name: el });
                           }}
                           value={fears[id]?.name || ""}
-                          onChange={(e) => handleFearChange(id, "name", e.target.value)}
+                          onChange={(e) => {
+                            handleFearChange(id, "name", e.target.value);
+                            ai.resetForStage('action_planning');
+                          }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
                           disabled={step !== 4}
@@ -1429,7 +1453,10 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                             fearTextareaRefs.current.set(id, { ...refs, mitigation: el });
                           }}
                           value={fears[id].mitigation}
-                          onChange={(e) => handleFearChange(id, "mitigation", e.target.value)}
+                          onChange={(e) => {
+                            handleFearChange(id, "mitigation", e.target.value);
+                            ai.resetForStage('action_planning');
+                          }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
                           disabled={step !== 4}
@@ -1443,7 +1470,10 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                             fearTextareaRefs.current.set(id, { ...refs, contingency: el });
                           }}
                           value={fears[id].contingency}
-                          onChange={(e) => handleFearChange(id, "contingency", e.target.value)}
+                          onChange={(e) => {
+                            handleFearChange(id, "contingency", e.target.value);
+                            ai.resetForStage('action_planning');
+                          }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
                           disabled={step !== 4}
@@ -1474,7 +1504,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                 onRequest={() => {
                   ai.requestAssistance("action_planning", Object.values(solutions).join(', '), { painPoint, causes, perpetuations: selectedPerpetuations, solutions, fears });
                 }}
-                disabled={(Object.keys(fears).length === 0 && !notWorried) || !ai.canUseAI}
+                disabled={(Object.keys(fears).length === 0 && !notWorried) || !ai.canUseAI('action_planning')}
                 sessionId={sessionId}
                 context={{ solutions, fears }}
                 currentStep={step}
@@ -1503,7 +1533,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
               stage="action_planning"
               onDismiss={ai.dismissResponse}
               onFeedback={ai.provideFeedback}
-              canFollowUp={ai.canUseAI}
+              canFollowUp={ai.canUseAI('action_planning')}
             />
           )}
         </div>
@@ -1547,7 +1577,10 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                   <textarea
                     ref={otherActionTextareaRef}
                     value={actionPlan.otherActionText}
-                    onChange={(e) => handleOtherActionChange(e.target.value)}
+                    onChange={(e) => {
+                      handleOtherActionChange(e.target.value);
+                      // No AI reset needed for action plan selection as there's no AI button for this step
+                    }}
                     onInput={(e) => syncTextareaHeights(e)}
                     onFocus={handleOtherActionFocus}
                     className="auto-resizing-textarea"
