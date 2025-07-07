@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import ThemeSwitcher from './ThemeSwitcher';
 
 const Navigation = () => {
-  const { user, isAuthenticated, logout, isLoading } = useAuth();
+  const { user, isAuthenticated, logout, isLoading, isSessionActive } = useAuth();
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -15,8 +15,8 @@ const Navigation = () => {
     router.push('/');
   };
 
-  if (isLoading) {
-    return null; // Don't render navigation while loading
+  if (isLoading || !isAuthenticated || !isSessionActive) {
+    return null; // Don't render navigation while loading, not authenticated, or session not active
   }
 
   return (

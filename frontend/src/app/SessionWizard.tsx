@@ -12,6 +12,7 @@ import {
   SuggestedCause,
 } from "@/components/AIComponents";
 import { AIAssistantProvider, useAIAssistant } from "@/contexts/AIAssistantContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useSummaryDownloader, type SummaryData, type SessionData } from "@/hooks/useSummaryDownloader";
 
 interface ActionableItem {
@@ -22,6 +23,7 @@ interface ActionableItem {
 
 function SessionWizardContent({ sessionId }: { sessionId: string }) {
   const searchParams = useSearchParams();
+  const { startSession: startAuthSession, endSession: endAuthSession } = useAuth();
   const [painPoint, setPainPoint] = useState("");
   const [step, setStep] = useState(0);
   const [causes, setCauses] = useState([{ cause: "", assumption: "" }]);
@@ -388,6 +390,9 @@ useEffect(() => {
 
   const startSession = () => {
     if (painPoint.trim()) {
+      // Start the auth session to show navigation
+      startAuthSession();
+      
       // Check if the problem statement is too simplistic
       if (isProblemSimplistic(painPoint)) {
         // Automatically trigger AI assistance to help elaborate the problem with intervention prompt
@@ -756,6 +761,10 @@ useEffect(() => {
         // Mark session as saved and close modal
         setSessionSaved(true);
         setShowSummaryModal(false);
+        
+        // End the auth session since we're navigating away
+        endAuthSession();
+        
         window.location.href = "/history";
       } else {
         const errorText = await response.text();

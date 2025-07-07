@@ -11,10 +11,13 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isSessionActive: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   checkAuthStatus: () => Promise<void>;
+  startSession: () => void;
+  endSession: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -34,6 +37,7 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSessionActive, setIsSessionActive] = useState(false);
 
   const isAuthenticated = !!user;
 
@@ -122,7 +126,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('Logout error:', error);
     } finally {
       setUser(null);
+      setIsSessionActive(false); // End session when logging out
     }
+  };
+
+  const startSession = () => {
+    setIsSessionActive(true);
+  };
+
+  const endSession = () => {
+    setIsSessionActive(false);
   };
 
   useEffect(() => {
@@ -133,10 +146,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user,
     isLoading,
     isAuthenticated,
+    isSessionActive,
     login,
     register,
     logout,
     checkAuthStatus,
+    startSession,
+    endSession,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
