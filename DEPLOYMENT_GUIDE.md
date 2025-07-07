@@ -48,20 +48,30 @@ CLAUDE_API_KEY=your_claude_api_key_here
 ### 1. Set Up Persistent Disk (CRITICAL - Do this first!)
 Follow the "Persistent Disk Setup" instructions above.
 
-### 2. Update Start Command (CRITICAL)
-**You must update the Start Command in your Render dashboard:**
+### 2. Configure Root Directory and Start Command (CRITICAL)
+**You must configure both the Root Directory and Start Command in your Render dashboard:**
 
+#### Step A: Set Root Directory
 1. Go to your Render dashboard
 2. Select your backend service
 3. Navigate to "Settings" tab
-4. Find the "Start Command" field
-5. **Replace the current command with:**
-   ```
-   cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
-   ```
+4. Find the "Root Directory" field
+5. **Set it to:** `backend`
 6. **Save changes**
 
-**⚠️ IMPORTANT**: The `cd backend &&` part is critical because it ensures the application runs from the correct directory where it can find the database file.
+#### Step B: Set Start Command
+1. In the same Settings tab
+2. Find the "Start Command" field
+3. **Replace the current command with:**
+   ```
+   uvicorn main:app --host 0.0.0.0 --port $PORT
+   ```
+4. **Save changes**
+
+**⚠️ IMPORTANT**:
+- The **Root Directory** setting tells Render to run everything from the `backend` folder
+- The **Start Command** should NOT include `cd backend &&` because we're already in that directory
+- This ensures the application can find the database file and all dependencies
 
 ### 3. Set Environment Variables in Render Dashboard
 1. Go to your Render dashboard
@@ -143,9 +153,10 @@ sqlite3.OperationalError: unable to open database file
 ```
 
 **Solution:**
-1. **Update the Start Command** in Render dashboard to: `cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT`
-2. **Ensure persistent disk is mounted** at `/var/data`
-3. **Redeploy the service**
+1. **Set Root Directory** in Render dashboard to: `backend`
+2. **Set Start Command** in Render dashboard to: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+3. **Ensure persistent disk is mounted** at `/var/data`
+4. **Redeploy the service**
 
 ### If users still lose data:
 1. **Check persistent disk is properly mounted** at `/var/data`
@@ -159,8 +170,11 @@ sqlite3.OperationalError: unable to open database file
 3. **Ensure disk is attached to the correct service**
 4. **Confirm Start Command includes** `cd backend &&`
 
-### Common Start Command Issues:
-- ❌ **Wrong**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-- ✅ **Correct**: `cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT`
+### Common Configuration Issues:
+- ❌ **Wrong**: Root Directory not set, Start Command: `cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT`
+- ✅ **Correct**: Root Directory: `backend`, Start Command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+
+### If you see "No such file or directory" error:
+This means you have `cd backend &&` in your start command but Root Directory is already set to `backend`. Remove the `cd backend &&` part from the start command.
 
 The previous issue where users had to "recreate accounts with the same credentials" should now be **completely resolved** with proper persistent disk setup.
