@@ -148,15 +148,15 @@ You can verify the fix works by:
 
 ### "unable to open database file" Error
 **Problem**: SQLite can't create/access the database file during startup
-**Root Cause**: Race condition where the app starts before the persistent disk is ready
+**Root Cause**: Permission error - application cannot create the `/var/data` directory
 **Solution**:
-1. The application now uses FastAPI's startup event handler to delay database initialization
-2. This ensures the persistent disk at `/var/data` is fully mounted before database operations
-3. If you still see this error, verify:
-   - **Set Root Directory** in Render dashboard to: `backend`
-   - **Set Start Command** in Render dashboard to: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-   - **Ensure persistent disk is mounted** at `/var/data`
-   - **Redeploy the service**
+1. **CRITICAL**: Update the Start Command in Render dashboard to: `mkdir -p /var/data && uvicorn main:app --host 0.0.0.0 --port $PORT`
+2. The `mkdir -p /var/data` command creates the directory with proper permissions before the app starts
+3. Verify these settings in Render dashboard:
+   - **Root Directory**: `backend`
+   - **Start Command**: `mkdir -p /var/data && uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - **Persistent disk mounted** at `/var/data`
+4. **Redeploy the service**
 
 ### If users still lose data:
 1. **Check persistent disk is properly mounted** at `/var/data`
