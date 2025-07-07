@@ -44,7 +44,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DATABASE = "nuudle.db"
+# Database configuration with persistent storage
+# Use /var/data for production (Render persistent disk), fallback to current directory for development
+DATABASE_DIR = os.getenv("DATABASE_DIR", ".")
+DATABASE_PATH = "/var/data/nuudle.db" if os.path.exists("/var/data") or os.getenv("RENDER") else "nuudle.db"
+
+# For production with custom DATABASE_DIR, ensure directory exists
+if DATABASE_DIR != "." and not os.path.exists(DATABASE_DIR):
+    try:
+        os.makedirs(DATABASE_DIR, exist_ok=True)
+        DATABASE_PATH = os.path.join(DATABASE_DIR, "nuudle.db")
+    except PermissionError:
+        print(f"Warning: Cannot create {DATABASE_DIR}, falling back to local directory")
+        DATABASE_PATH = "nuudle.db"
+
+DATABASE = DATABASE_PATH
 
 # Authentication Models
 class UserCreate(BaseModel):

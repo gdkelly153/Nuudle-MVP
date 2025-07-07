@@ -1,8 +1,24 @@
-# 🚀 Deployment Guide - Critical Environment Variables
+# 🚀 Deployment Guide - Critical Setup for Data Persistence
 
-## Required Environment Variables for Production
+## ⚠️ CRITICAL: Persistent Disk Setup (REQUIRED)
 
-### Backend Environment Variables
+**The most important step to prevent data loss is setting up a persistent disk.**
+
+### 1. Create Persistent Disk in Render Dashboard
+
+1. **Go to your Render dashboard**
+2. **Select your backend service**
+3. **Navigate to "Disks" tab**
+4. **Click "Add Disk"**
+5. **Configure the disk:**
+   - **Name**: `nuudle-data`
+   - **Mount Path**: `/var/data`
+   - **Size**: `1 GB` (minimum, can be increased later)
+6. **Save the disk configuration**
+
+**⚠️ WITHOUT THIS STEP, ALL USER DATA WILL BE LOST WHEN THE SERVER RESTARTS!**
+
+### 2. Required Environment Variables for Production
 
 The following environment variables **MUST** be set in your Render dashboard for the backend service:
 
@@ -11,7 +27,7 @@ The following environment variables **MUST** be set in your Render dashboard for
 SECRET_KEY=your_secure_secret_key_here_minimum_32_characters_long
 ```
 
-**⚠️ IMPORTANT**: 
+**⚠️ IMPORTANT**:
 - This key is used to sign JWT authentication tokens
 - Must be the same across all server restarts to maintain user sessions
 - Should be a long, random string (minimum 32 characters)
@@ -29,24 +45,50 @@ CLAUDE_API_KEY=your_claude_api_key_here
 
 ## Render Deployment Steps
 
-### 1. Set Environment Variables in Render Dashboard
+### 1. Set Up Persistent Disk (CRITICAL - Do this first!)
+Follow the "Persistent Disk Setup" instructions above.
+
+### 2. Set Environment Variables in Render Dashboard
 1. Go to your Render dashboard
 2. Select your backend service
 3. Navigate to "Environment" tab
 4. Add the `SECRET_KEY` variable with a secure value
 5. Save changes
 
-### 2. Deploy the Latest Changes
+### 3. Deploy the Latest Changes
 The latest commit includes:
+- ✅ **Persistent database storage** - Database now stored in `/var/data/nuudle.db`
 - ✅ Fixed SECRET_KEY to use environment variable
 - ✅ Removed destructive table initialization
 - ✅ Safe database table creation with `IF NOT EXISTS`
+- ✅ Automatic fallback for local development
 
-### 3. Verify Deployment
+### 4. Verify Deployment
 After deployment, test that:
 - Users can register and login
 - Sessions persist across server restarts
 - No data loss occurs during server sleep/wake cycles
+- Database file is created in `/var/data/nuudle.db`
+
+## How the Persistent Storage Fix Works
+
+### Problem Before:
+- Database stored in ephemeral filesystem (`nuudle.db` in working directory)
+- When server goes to sleep, filesystem is wiped clean
+- All user accounts and sessions lost permanently
+- Users had to recreate accounts with same credentials
+
+### Solution Now:
+- Database stored in persistent disk (`/var/data/nuudle.db`)
+- Persistent disk survives server restarts and sleep cycles
+- All user data and sessions preserved permanently
+- Smart fallback to local storage for development
+
+### Code Logic:
+```python
+# Production: Use persistent disk if available
+DATABASE_PATH = "/var/data/nuudle.db" if os.path.exists("/var/data") or os.getenv("RENDER") else "nuudle.db"
+```
 
 ## Database Migration Notes
 
@@ -58,18 +100,35 @@ The current SQLite implementation will work for development and small-scale prod
 
 ## Security Considerations
 
+- ✅ **Persistent data storage** - Database survives server restarts
 - ✅ SECRET_KEY now uses environment variable
 - ✅ Database tables use safe initialization
 - ✅ No more random key generation on restart
 - ✅ User data persists across server restarts
+- ✅ Smart fallback for development environments
 
 ## Testing the Fix
 
 You can verify the fix works by:
-1. Creating a user account
-2. Creating a session
-3. Waiting for server to restart (or manually restart)
-4. Logging in with same credentials
-5. Verifying session data is still available
+1. **Deploy with persistent disk configured**
+2. Creating a user account
+3. Creating a session
+4. Waiting for server to restart (or manually restart in Render dashboard)
+5. Logging in with same credentials (should work!)
+6. Verifying session data is still available
+7. Check that database file exists at `/var/data/nuudle.db`
 
-The previous issue where users had to "recreate accounts with the same credentials" should now be completely resolved.
+## Troubleshooting
+
+### If users still lose data:
+1. **Check persistent disk is properly mounted** at `/var/data`
+2. **Verify disk has sufficient space** (at least 100MB free)
+3. **Check Render logs** for database connection errors
+4. **Ensure SECRET_KEY environment variable is set**
+
+### If deployment fails:
+1. **Verify persistent disk configuration** in Render dashboard
+2. **Check that mount path is exactly** `/var/data`
+3. **Ensure disk is attached to the correct service**
+
+The previous issue where users had to "recreate accounts with the same credentials" should now be **completely resolved** with proper persistent disk setup.
