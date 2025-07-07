@@ -912,6 +912,10 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
     value={painPoint}
     onChange={(e) => {
       setPainPoint(e.target.value);
+      // Reset all possible problem articulation stages since we don't know which one will be used
+      ai.resetForStage('problem_articulation_direct');
+      ai.resetForStage('problem_articulation_intervention');
+      ai.resetForStage('problem_articulation_context_aware');
     }}
     onInput={(e) => syncTextareaHeights(e)}
     className="auto-resizing-textarea"
@@ -989,6 +993,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                             value={item.cause}
                             onChange={(e) => {
                               handleCauseChange(index, "cause", e.target.value);
+                              ai.resetForStage('root_cause');
                             }}
                             onInput={(e) => syncTextareaHeights(e, index)}
                             className="auto-resizing-textarea"
@@ -1011,6 +1016,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                             value={item.assumption || ""}
                             onChange={(e) => {
                               handleCauseChange(index, "assumption", e.target.value);
+                              ai.resetForStage('identify_assumptions');
                             }}
                             onInput={(e) => syncTextareaHeights(e, index)}
                             className="auto-resizing-textarea"
@@ -1095,6 +1101,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                           value={perpetuation.text}
                           onChange={(e) => {
                             handlePerpetuationChange(perpetuation.id, e.target.value);
+                            ai.resetForStage('perpetuation');
                           }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
@@ -1286,6 +1293,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                             value={solutions[item.id]}
                             onChange={(e) => {
                               handleSolutionActionChange(item.id, e.target.value);
+                              ai.resetForStage('potential_actions');
                             }}
                             onInput={(e) => syncTextareaHeights(e)}
                             className="auto-resizing-textarea"
@@ -1326,6 +1334,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                               value={solutions[item.id]}
                               onChange={(e) => {
                                 handleSolutionActionChange(item.id, e.target.value);
+                                ai.resetForStage('potential_actions');
                               }}
                               onInput={(e) => syncTextareaHeights(e)}
                               className="auto-resizing-textarea"
@@ -1429,6 +1438,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                           value={fears[id]?.name || ""}
                           onChange={(e) => {
                             handleFearChange(id, "name", e.target.value);
+                            ai.resetForStage('action_planning');
                           }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
@@ -1445,6 +1455,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                           value={fears[id].mitigation}
                           onChange={(e) => {
                             handleFearChange(id, "mitigation", e.target.value);
+                            ai.resetForStage('action_planning');
                           }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
@@ -1461,6 +1472,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                           value={fears[id].contingency}
                           onChange={(e) => {
                             handleFearChange(id, "contingency", e.target.value);
+                            ai.resetForStage('action_planning');
                           }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"

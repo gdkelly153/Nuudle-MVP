@@ -456,12 +456,13 @@ export const useAIAssistant = (sessionId: string, onInteractionLog?: (stage: str
   };
 
   const resetForStage = (stage: string) => {
-    // Clear the cached response for this stage to allow new requests
-    setResponses(prev => ({ ...prev, [stage]: null }));
-    // Clear any active response if it's for this stage
-    if (activeStage === stage) {
-      setActiveStage(null);
-    }
+    // Do not clear the cached response - let it persist until a new response is generated
+    // setResponses(prev => ({ ...prev, [stage]: null }));
+    // Do not clear the active response - let it remain visible
+    // if (activeStage === stage) {
+    //   setActiveStage(null);
+    // }
+    
     // Clear any errors
     setError(null);
     // Clear loading stage if it matches
