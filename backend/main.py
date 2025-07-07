@@ -10,6 +10,7 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 import secrets
 import os
+import time
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -146,39 +147,75 @@ class SessionRead(BaseModel):
     summary_header: Optional[str] = None
 
 def create_tables():
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
+    """Create database tables with connection retry logic.
     
-    # Create users table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            hashed_password TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+    This function implements a robust retry mechanism to handle the case where
+    the persistent disk (/var/data) is not yet mounted when the application starts.
+    This is common in cloud environments where disk mounting is asynchronous.
+    """
+    max_retries = 15  # Maximum number of connection attempts
+    retry_delay = 2   # Seconds to wait between retries
     
-    # Create sessions table (keep existing structure) - safe initialization
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            pain_point TEXT,
-            issue_tree TEXT,
-            assumptions TEXT,
-            perpetuations TEXT,
-            solutions TEXT,
-            fears TEXT,
-            action_plan TEXT,
-            ai_summary TEXT,
-            summary_header TEXT,
-            user_id INTEGER,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    """)
-    conn.commit()
-    conn.close()
+    for attempt in range(1, max_retries + 1):
+        try:
+            print(f"Database connection attempt {attempt}/{max_retries} - Path: {DATABASE}")
+            conn = sqlite3.connect(DATABASE)
+            cursor = conn.cursor()
+            
+            # Create users table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT UNIQUE NOT NULL,
+                    hashed_password TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Create sessions table (keep existing structure) - safe initialization
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    pain_point TEXT,
+                    issue_tree TEXT,
+                    assumptions TEXT,
+                    perpetuations TEXT,
+                    solutions TEXT,
+                    fears TEXT,
+                    action_plan TEXT,
+                    ai_summary TEXT,
+                    summary_header TEXT,
+                    user_id INTEGER,
+                    FOREIGN KEY (user_id) REFERENCES users (id)
+                )
+            """)
+            conn.commit()
+            conn.close()
+            
+            print(f"Database initialization successful on attempt {attempt}")
+            return  # Success! Exit the function
+            
+        except sqlite3.OperationalError as e:
+            if "unable to open database file" in str(e):
+                if attempt < max_retries:
+                    print(f"Database not ready (attempt {attempt}/{max_retries}). Persistent disk may still be mounting. Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    print(f"FATAL: Database connection failed after {max_retries} attempts. Persistent disk may not be properly configured.")
+                    raise Exception(f"Database initialization failed after {max_retries} attempts: {e}")
+            else:
+                # Different SQLite error, don't retry
+                print(f"Database error (not connection-related): {e}")
+                raise
+        except Exception as e:
+            # Unexpected error, don't retry
+            print(f"Unexpected error during database initialization: {e}")
+            raise
+    
+    # This should never be reached due to the logic above, but just in case
+    raise Exception("Database initialization failed: maximum retries exceeded")
 
 # Authentication helper functions
 def verify_password(plain_password, hashed_password):
