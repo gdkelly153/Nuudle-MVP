@@ -3,7 +3,7 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NODE_ENV === 'production'
       ? 'https://nuudle.onrender.com'
-      : 'http://localhost:3001',
+      : 'http://localhost:8000',
   },
   eslint: {
     ignoreDuringBuilds: true,
@@ -15,7 +15,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:3001/api/:path*',
+        destination: 'http://localhost:8000/api/:path*',
       },
     ];
   },

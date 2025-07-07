@@ -190,7 +190,7 @@ export const AIResponseCard: React.FC<{
                 className="ai-response-feedback-btn positive"
                 title="Mark as helpful"
               >
-                <CheckCircle className="w-4 h-4 text-refined-balance-teal" />
+                <CheckCircle className="w-4 h-4 text-refined-balance-teal" strokeWidth={2.5} />
                 Helpful
               </button>
               
@@ -199,7 +199,7 @@ export const AIResponseCard: React.FC<{
                 className="ai-response-feedback-btn negative"
                 title="Mark as not helpful"
               >
-                <X className="w-4 h-4 text-warm-brick" />
+                <X className="w-4 h-4 text-warm-brick" strokeWidth={2.5} />
                 Not helpful
               </button>
             </>
@@ -228,7 +228,7 @@ export const AIResponseCard: React.FC<{
             aria-label="Dismiss AI response"
             title="Dismiss this response"
           >
-            <X className="w-4 h-4 text-warm-brick" />
+            <X className="w-4 h-4 text-warm-brick" strokeWidth={2.5} />
             Dismiss
           </button>
         </div>

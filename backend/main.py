@@ -4,11 +4,19 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 import sqlite3
 import json
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 import secrets
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Import AI service functions
+from ai_service import get_ai_response, get_ai_summary
 
 app = FastAPI()
 
@@ -55,6 +63,38 @@ class AuthResponse(BaseModel):
     success: bool
     user: Optional[User] = None
     error: Optional[str] = None
+
+# AI-related Models
+class AIAssistRequest(BaseModel):
+    sessionId: str
+    stage: str
+    userInput: str
+    sessionContext: Dict[str, Any]
+
+class AIAssistResponse(BaseModel):
+    success: bool
+    interactionId: Optional[str] = None
+    response: Optional[str] = None
+    cost: Optional[float] = None
+    tokensUsed: Optional[int] = None
+    usage: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    fallback: Optional[str] = None
+
+class AISummaryRequest(BaseModel):
+    sessionId: str
+    sessionData: Dict[str, Any]
+    aiInteractionLog: Optional[List[Dict[str, Any]]] = []
+
+class AISummaryResponse(BaseModel):
+    success: bool
+    interactionId: Optional[str] = None
+    summary: Optional[Dict[str, Any]] = None
+    cost: Optional[float] = None
+    tokensUsed: Optional[int] = None
+    usage: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    fallback: Optional[str] = None
 
 # Session Models
 class Fear(BaseModel):
@@ -404,3 +444,74 @@ def get_session(session_id: int, request: Request):
         ai_summary=json.loads(row["ai_summary"]) if row["ai_summary"] else None,
         summary_header=row["summary_header"]
     )
+
+# AI Endpoints
+@app.post("/api/ai/assist", response_model=AIAssistResponse)
+async def ai_assist(request: AIAssistRequest, current_request: Request):
+    """Get AI assistance for a specific stage of the session"""
+    # Get current user
+    current_user = get_current_user(current_request)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    # Validate required fields
+    if not request.sessionId or not request.stage or not request.sessionContext:
+        raise HTTPException(status_code=400, detail="sessionId, stage, and sessionContext are required")
+    
+    # userInput can be empty for identify_assumptions stage
+    if not request.userInput and request.stage != 'identify_assumptions':
+        raise HTTPException(status_code=400, detail="userInput is required for this stage")
+    
+    try:
+        result = await get_ai_response(
+            user_id=current_user.id,
+            session_id=request.sessionId,
+            stage=request.stage,
+            user_input=request.userInput,
+            session_context=request.sessionContext
+        )
+        
+        status_code = 200 if result["success"] else (429 if "Rate limit" in result.get("error", "") else 500)
+        
+        if status_code != 200:
+            raise HTTPException(status_code=status_code, detail=result)
+        
+        return AIAssistResponse(**result)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"success": False, "error": "Internal Server Error"})
+
+@app.post("/api/ai/summary", response_model=AISummaryResponse)
+async def ai_summary(request: AISummaryRequest, current_request: Request):
+    """Generate AI summary for a completed session"""
+    # Get current user
+    current_user = get_current_user(current_request)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    # Validate required fields
+    if not request.sessionId or not request.sessionData:
+        raise HTTPException(status_code=400, detail="sessionId and sessionData are required")
+    
+    try:
+        result = await get_ai_summary(
+            user_id=current_user.id,
+            session_id=request.sessionId,
+            session_data=request.sessionData,
+            ai_interaction_log=request.aiInteractionLog or []
+        )
+        
+        status_code = 200 if result["success"] else (429 if "Rate limit" in result.get("error", "") else 500)
+        
+        if status_code != 200:
+            raise HTTPException(status_code=status_code, detail=result)
+        
+        return AISummaryResponse(**result)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Summary generation error: {e}")
+        raise HTTPException(status_code=500, detail={"success": False, "error": "Internal Server Error"})
