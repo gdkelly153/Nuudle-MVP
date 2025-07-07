@@ -10,8 +10,8 @@ import {
   AIResponseCard,
   AIErrorCard,
   SuggestedCause,
-  useAIAssistant,
 } from "@/components/AIComponents";
+import { AIAssistantProvider, useAIAssistant } from "@/contexts/AIAssistantContext";
 import { useSummaryDownloader, type SummaryData, type SessionData } from "@/hooks/useSummaryDownloader";
 
 interface ActionableItem {
@@ -20,7 +20,7 @@ interface ActionableItem {
   assumption?: string;
 }
 
-export default function SessionWizard() {
+function SessionWizardContent({ sessionId }: { sessionId: string }) {
   const searchParams = useSearchParams();
   const [painPoint, setPainPoint] = useState("");
   const [step, setStep] = useState(0);
@@ -42,7 +42,6 @@ export default function SessionWizard() {
     selectedActionIds: [],
     otherActionText: "",
   });
-  const [sessionId, setSessionId] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [sessionSaved, setSessionSaved] = useState(false);
@@ -64,10 +63,6 @@ export default function SessionWizard() {
   // Use the summary downloader hook
   const summaryDownloader = useSummaryDownloader();
   
-  // Initialize session ID
-  useEffect(() => {
-    setSessionId(`session_${Date.now()}`);
-  }, []);
 
   // Load session data from URL parameters if editing
   useEffect(() => {
@@ -182,7 +177,7 @@ export default function SessionWizard() {
     }]);
   };
 
-  const ai = useAIAssistant(sessionId, logAIInteraction);
+  const ai = useAIAssistant();
 
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -344,13 +339,14 @@ useEffect(() => {
   }, [step]);
 
   useEffect(() => {
-    if (ai.currentResponse && step === 3 && ai.loadingStage === 'suggest_causes') {
-      const causes = ai.currentResponse.split('\n').filter(c => c.trim() !== '' && c.startsWith('- ')).map(c => c.substring(2));
+    const currentResponse = ai.getCurrentResponse();
+    if (currentResponse && step === 3 && ai.loadingStage === 'suggest_causes') {
+      const causes = currentResponse.split('\n').filter((c: string) => c.trim() !== '' && c.startsWith('- ')).map((c: string) => c.substring(2));
       setSuggestedCauses(causes);
     } else {
       setSuggestedCauses([]);
     }
-  }, [ai.currentResponse, step, ai.loadingStage]);
+  }, [ai.getCurrentResponse(), step, ai.loadingStage]);
 
   // Helper function to determine if problem statement is too simplistic
   const isProblemSimplistic = (text: string): boolean => {
@@ -912,10 +908,10 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
     value={painPoint}
     onChange={(e) => {
       setPainPoint(e.target.value);
-      // Reset all possible problem articulation stages since we don't know which one will be used
-      ai.resetForStage('problem_articulation_direct');
-      ai.resetForStage('problem_articulation_intervention');
-      ai.resetForStage('problem_articulation_context_aware');
+      // Clear all possible problem articulation stages since we don't know which one will be used
+      ai.clearResponseForStage('problem_articulation_direct');
+      ai.clearResponseForStage('problem_articulation_intervention');
+      ai.clearResponseForStage('problem_articulation_context_aware');
     }}
     onInput={(e) => syncTextareaHeights(e)}
     className="auto-resizing-textarea"
@@ -950,9 +946,9 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
             </Tooltip>
           </div>
           {ai.error && <AIErrorCard error={ai.error} onDismiss={ai.dismissResponse} />}
-          {ai.currentResponse && step === 0 && (
+          {ai.getCurrentResponse() && step === 0 && (
             <AIResponseCard
-              response={ai.currentResponse}
+              response={ai.getCurrentResponse()!}
               stage={ai.loadingStage === 'problem_articulation_direct' ? 'problem_articulation_direct' :
                      ai.loadingStage === 'problem_articulation_intervention' ? 'problem_articulation_intervention' :
                      'problem_articulation_context_aware'}
@@ -993,7 +989,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                             value={item.cause}
                             onChange={(e) => {
                               handleCauseChange(index, "cause", e.target.value);
-                              ai.resetForStage('root_cause');
+                              ai.clearResponseForStage('root_cause');
                             }}
                             onInput={(e) => syncTextareaHeights(e, index)}
                             className="auto-resizing-textarea"
@@ -1016,7 +1012,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                             value={item.assumption || ""}
                             onChange={(e) => {
                               handleCauseChange(index, "assumption", e.target.value);
-                              ai.resetForStage('identify_assumptions');
+                              ai.clearResponseForStage('identify_assumptions');
                             }}
                             onInput={(e) => syncTextareaHeights(e, index)}
                             className="auto-resizing-textarea"
@@ -1072,9 +1068,9 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
             </Tooltip>
           </div>
           {ai.error && <AIErrorCard error={ai.error} onDismiss={ai.dismissResponse} />}
-          {ai.currentResponse && step === 1 && (
+          {ai.getCurrentResponse() && step === 1 && (
             <AIResponseCard
-              response={ai.currentResponse}
+              response={ai.getCurrentResponse()!}
               stage={ai.lastAttemptedStage || ai.loadingStage || "root_cause"}
               onDismiss={ai.dismissResponse}
               onFeedback={ai.provideFeedback}
@@ -1101,7 +1097,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                           value={perpetuation.text}
                           onChange={(e) => {
                             handlePerpetuationChange(perpetuation.id, e.target.value);
-                            ai.resetForStage('perpetuation');
+                            ai.clearResponseForStage('perpetuation');
                           }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
@@ -1153,9 +1149,9 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                 </Tooltip>
               </div>
               {ai.error && <AIErrorCard error={ai.error} onDismiss={ai.dismissResponse} />}
-              {ai.currentResponse && step === 2 && (
+              {ai.getCurrentResponse() && step === 2 && (
                 <AIResponseCard
-                  response={ai.currentResponse}
+                  response={ai.getCurrentResponse()!}
                   stage="perpetuation"
                   onDismiss={ai.dismissResponse}
                   onFeedback={ai.provideFeedback}
@@ -1293,7 +1289,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                             value={solutions[item.id]}
                             onChange={(e) => {
                               handleSolutionActionChange(item.id, e.target.value);
-                              ai.resetForStage('potential_actions');
+                              ai.clearResponseForStage('potential_actions');
                             }}
                             onInput={(e) => syncTextareaHeights(e)}
                             className="auto-resizing-textarea"
@@ -1334,7 +1330,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                               value={solutions[item.id]}
                               onChange={(e) => {
                                 handleSolutionActionChange(item.id, e.target.value);
-                                ai.resetForStage('potential_actions');
+                                ai.clearResponseForStage('potential_actions');
                               }}
                               onInput={(e) => syncTextareaHeights(e)}
                               className="auto-resizing-textarea"
@@ -1398,9 +1394,9 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
             </Tooltip>
           </div>
           {ai.error && <AIErrorCard error={ai.error} onDismiss={ai.dismissResponse} />}
-          {ai.currentResponse && step === 3 && (
+          {ai.getCurrentResponse() && step === 3 && (
             <AIResponseCard
-              response={ai.currentResponse}
+              response={ai.getCurrentResponse()!}
               stage="potential_actions"
               onDismiss={ai.dismissResponse}
               onFeedback={ai.provideFeedback}
@@ -1438,7 +1434,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                           value={fears[id]?.name || ""}
                           onChange={(e) => {
                             handleFearChange(id, "name", e.target.value);
-                            ai.resetForStage('action_planning');
+                            ai.clearResponseForStage('action_planning');
                           }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
@@ -1455,7 +1451,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                           value={fears[id].mitigation}
                           onChange={(e) => {
                             handleFearChange(id, "mitigation", e.target.value);
-                            ai.resetForStage('action_planning');
+                            ai.clearResponseForStage('action_planning');
                           }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
@@ -1472,7 +1468,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                           value={fears[id].contingency}
                           onChange={(e) => {
                             handleFearChange(id, "contingency", e.target.value);
-                            ai.resetForStage('action_planning');
+                            ai.clearResponseForStage('action_planning');
                           }}
                           onInput={(e) => syncTextareaHeights(e)}
                           className="auto-resizing-textarea"
@@ -1527,9 +1523,9 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
             </Tooltip>
           </div>
           {ai.error && <AIErrorCard error={ai.error} onDismiss={ai.dismissResponse} />}
-          {ai.currentResponse && step === 4 && (
+          {ai.getCurrentResponse() && step === 4 && (
             <AIResponseCard
-              response={ai.currentResponse}
+              response={ai.getCurrentResponse()!}
               stage="action_planning"
               onDismiss={ai.dismissResponse}
               onFeedback={ai.provideFeedback}
@@ -1726,5 +1722,28 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
       
     </main>
     </>
+  );
+}
+
+export default function SessionWizard() {
+  const [sessionId, setSessionId] = useState<string>("");
+  
+  // Initialize session ID
+  useEffect(() => {
+    setSessionId(`session_${Date.now()}`);
+  }, []);
+
+  const logAIInteraction = (stage: string, userInputBefore: string, aiResponse: string) => {
+    // This will be handled by the SessionWizardContent component
+  };
+
+  if (!sessionId) {
+    return <div>Loading...</div>;
+  }
+
+  return (
+    <AIAssistantProvider sessionId={sessionId} onInteractionLog={logAIInteraction}>
+      <SessionWizardContent sessionId={sessionId} />
+    </AIAssistantProvider>
   );
 }
