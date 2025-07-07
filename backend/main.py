@@ -242,7 +242,14 @@ def get_current_user(request: Request):
     
     return User(id=user["id"], email=user["email"])
 
-create_tables()
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database tables on application startup.
+    
+    This ensures the persistent disk (/var/data) is fully mounted
+    before attempting to create or access the database file.
+    """
+    create_tables()
 
 def extract_summary_header(ai_summary: Optional[dict], pain_point: str) -> str:
     """Extract the title from AI summary or create a fallback header"""

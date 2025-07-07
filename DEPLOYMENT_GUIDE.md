@@ -146,17 +146,17 @@ You can verify the fix works by:
 
 ## Troubleshooting
 
-### If you see "unable to open database file" error:
-**This is the most common deployment error.** The logs will show:
-```
-sqlite3.OperationalError: unable to open database file
-```
-
-**Solution:**
-1. **Set Root Directory** in Render dashboard to: `backend`
-2. **Set Start Command** in Render dashboard to: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-3. **Ensure persistent disk is mounted** at `/var/data`
-4. **Redeploy the service**
+### "unable to open database file" Error
+**Problem**: SQLite can't create/access the database file during startup
+**Root Cause**: Race condition where the app starts before the persistent disk is ready
+**Solution**:
+1. The application now uses FastAPI's startup event handler to delay database initialization
+2. This ensures the persistent disk at `/var/data` is fully mounted before database operations
+3. If you still see this error, verify:
+   - **Set Root Directory** in Render dashboard to: `backend`
+   - **Set Start Command** in Render dashboard to: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - **Ensure persistent disk is mounted** at `/var/data`
+   - **Redeploy the service**
 
 ### If users still lose data:
 1. **Check persistent disk is properly mounted** at `/var/data`
