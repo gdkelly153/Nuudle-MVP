@@ -1,20 +1,20 @@
 from fastapi import FastAPI, HTTPException, Depends, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
-import sqlite3
 import json
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-import secrets
 import os
-import time
 from dotenv import load_dotenv
+from bson import ObjectId
 
 # Load environment variables
 load_dotenv()
+
+# Import database functions
+from database import connect_to_mongo, close_mongo_connection, get_database
 
 # Import AI service functions
 from ai_service import get_ai_response, get_ai_summary
@@ -45,22 +45,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Database configuration with persistent storage
-# Use /var/data for production (Render persistent disk), fallback to current directory for development
-DATABASE_DIR = os.getenv("DATABASE_DIR", ".")
-DATABASE_PATH = "/var/data/nuudle.db" if os.path.exists("/var/data") or os.getenv("RENDER") else "nuudle.db"
-
-# For production with custom DATABASE_DIR, ensure directory exists
-if DATABASE_DIR != "." and not os.path.exists(DATABASE_DIR):
-    try:
-        os.makedirs(DATABASE_DIR, exist_ok=True)
-        DATABASE_PATH = os.path.join(DATABASE_DIR, "nuudle.db")
-    except PermissionError:
-        print(f"Warning: Cannot create {DATABASE_DIR}, falling back to local directory")
-        DATABASE_PATH = "nuudle.db"
-
-DATABASE = DATABASE_PATH
-
 # Authentication Models
 class UserCreate(BaseModel):
     email: EmailStr
@@ -71,7 +55,7 @@ class UserLogin(BaseModel):
     password: str
 
 class User(BaseModel):
-    id: int
+    id: str
     email: str
 
 class AuthResponse(BaseModel):
@@ -117,7 +101,6 @@ class Fear(BaseModel):
     mitigation: str
     contingency: str
 
-# This is the model for creating a new session
 class IssueTree(BaseModel):
     primary_cause: str
     sub_causes: List[str]
@@ -132,9 +115,8 @@ class SessionCreate(BaseModel):
     action_plan: str
     ai_summary: Optional[dict] = None
 
-# This is the model for reading a session from the DB
 class SessionRead(BaseModel):
-    id: int
+    id: str
     created_at: str
     pain_point: str
     issue_tree: IssueTree
@@ -146,85 +128,31 @@ class SessionRead(BaseModel):
     ai_summary: Optional[dict] = None
     summary_header: Optional[str] = None
 
-def create_tables():
-    """Create database tables with connection retry logic.
+# Database helper functions
+async def get_user_by_email(email: str):
+    """Get user by email from MongoDB"""
+    db = get_database()
+    user = await db.users.find_one({"email": email})
+    return user
+
+async def create_user(email: str, password: str):
+    """Create new user in MongoDB"""
+    hashed_password = get_password_hash(password)
+    db = get_database()
     
-    This function implements a robust retry mechanism to handle the case where
-    the persistent disk (/var/data) is not yet mounted when the application starts.
-    This is common in cloud environments where disk mounting is asynchronous.
-    """
-    max_retries = 15  # Maximum number of connection attempts
-    retry_delay = 2   # Seconds to wait between retries
+    # Check if user already exists
+    existing_user = await get_user_by_email(email)
+    if existing_user:
+        return None
     
-    for attempt in range(1, max_retries + 1):
-        try:
-            print(f"Database connection attempt {attempt}/{max_retries} - Path: {DATABASE}")
-            
-            # Ensure the database directory exists (critical for /var/data on cloud platforms)
-            db_dir = os.path.dirname(DATABASE)
-            if db_dir:  # Only create directory if DATABASE has a directory component
-                os.makedirs(db_dir, exist_ok=True)
-                print(f"Directory ensured: {db_dir}")
-            
-            conn = sqlite3.connect(DATABASE)
-            cursor = conn.cursor()
-            
-            # Create users table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    email TEXT UNIQUE NOT NULL,
-                    hashed_password TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Create sessions table (keep existing structure) - safe initialization
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS sessions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    pain_point TEXT,
-                    issue_tree TEXT,
-                    assumptions TEXT,
-                    perpetuations TEXT,
-                    solutions TEXT,
-                    fears TEXT,
-                    action_plan TEXT,
-                    ai_summary TEXT,
-                    summary_header TEXT,
-                    user_id INTEGER,
-                    FOREIGN KEY (user_id) REFERENCES users (id)
-                )
-            """)
-            conn.commit()
-            conn.close()
-            
-            print(f"Database initialization successful on attempt {attempt}")
-            return  # Success! Exit the function
-            
-        except (sqlite3.OperationalError, OSError, PermissionError) as e:
-            if ("unable to open database file" in str(e) or
-                "Permission denied" in str(e) or
-                "No such file or directory" in str(e)):
-                if attempt < max_retries:
-                    print(f"Database/directory not ready (attempt {attempt}/{max_retries}). Persistent disk may still be mounting. Retrying in {retry_delay} seconds...")
-                    time.sleep(retry_delay)
-                    continue
-                else:
-                    print(f"FATAL: Database connection failed after {max_retries} attempts. Persistent disk may not be properly configured.")
-                    raise Exception(f"Database initialization failed after {max_retries} attempts: {e}")
-            else:
-                # Different error, don't retry
-                print(f"Database/filesystem error (not connection-related): {e}")
-                raise
-        except Exception as e:
-            # Unexpected error, don't retry
-            print(f"Unexpected error during database initialization: {e}")
-            raise
+    user_doc = {
+        "email": email,
+        "hashed_password": hashed_password,
+        "created_at": datetime.utcnow()
+    }
     
-    # This should never be reached due to the logic above, but just in case
-    raise Exception("Database initialization failed: maximum retries exceeded")
+    result = await db.users.insert_one(user_doc)
+    return str(result.inserted_id)
 
 # Authentication helper functions
 def verify_password(plain_password, hashed_password):
@@ -243,33 +171,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def get_user_by_email(email: str):
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
-    user = cursor.fetchone()
-    conn.close()
-    return user
-
-def create_user(email: str, password: str):
-    hashed_password = get_password_hash(password)
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            "INSERT INTO users (email, hashed_password) VALUES (?, ?)",
-            (email, hashed_password)
-        )
-        user_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        return user_id
-    except sqlite3.IntegrityError:
-        conn.close()
-        return None
-
-def get_current_user(request: Request):
+async def get_current_user(request: Request):
+    """Get current user from JWT token"""
     token = request.cookies.get("access_token")
     if not token:
         return None
@@ -282,20 +185,21 @@ def get_current_user(request: Request):
     except JWTError:
         return None
     
-    user = get_user_by_email(email)
+    user = await get_user_by_email(email)
     if user is None:
         return None
     
-    return User(id=user["id"], email=user["email"])
+    return User(id=str(user["_id"]), email=user["email"])
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database tables on application startup.
-    
-    This ensures the persistent disk (/var/data) is fully mounted
-    before attempting to create or access the database file.
-    """
-    create_tables()
+    """Initialize database connection on application startup"""
+    await connect_to_mongo()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close database connection on application shutdown"""
+    await close_mongo_connection()
 
 def extract_summary_header(ai_summary: Optional[dict], pain_point: str) -> str:
     """Extract the title from AI summary or create a fallback header"""
@@ -315,12 +219,12 @@ def extract_summary_header(ai_summary: Optional[dict], pain_point: str) -> str:
 @app.post("/api/auth/register", response_model=AuthResponse)
 async def register(user_data: UserCreate, response: Response):
     # Check if user already exists
-    existing_user = get_user_by_email(user_data.email)
+    existing_user = await get_user_by_email(user_data.email)
     if existing_user:
         return AuthResponse(success=False, error="Email already registered")
     
     # Create new user
-    user_id = create_user(user_data.email, user_data.password)
+    user_id = await create_user(user_data.email, user_data.password)
     if user_id is None:
         return AuthResponse(success=False, error="Failed to create user")
     
@@ -346,7 +250,7 @@ async def register(user_data: UserCreate, response: Response):
 @app.post("/api/auth/login", response_model=AuthResponse)
 async def login(user_data: UserLogin, response: Response):
     # Verify user credentials
-    user = get_user_by_email(user_data.email)
+    user = await get_user_by_email(user_data.email)
     if not user or not verify_password(user_data.password, user["hashed_password"]):
         return AuthResponse(success=False, error="Invalid email or password")
     
@@ -366,12 +270,12 @@ async def login(user_data: UserLogin, response: Response):
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60
     )
     
-    user_obj = User(id=user["id"], email=user["email"])
+    user_obj = User(id=str(user["_id"]), email=user["email"])
     return AuthResponse(success=True, user=user_obj)
 
 @app.get("/api/auth/status", response_model=AuthResponse)
 async def auth_status(request: Request):
-    user = get_current_user(request)
+    user = await get_current_user(request)
     if user:
         return AuthResponse(success=True, user=user)
     else:
@@ -391,11 +295,10 @@ async def logout(response: Response):
 @app.post("/api/sessions", response_model=SessionRead)
 async def create_session(session: SessionCreate, request: Request):
     # Get current user (optional for now to maintain compatibility)
-    current_user = get_current_user(request)
+    current_user = await get_current_user(request)
     user_id = current_user.id if current_user else None
     
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
+    db = get_database()
     
     # Extract summary header from AI summary or create fallback
     summary_header = extract_summary_header(session.ai_summary, session.pain_point)
@@ -406,31 +309,27 @@ async def create_session(session: SessionCreate, request: Request):
         sub_causes=session.causes[1:]
     )
 
-    # Serialize JSON fields
-    issue_tree_json = issue_tree.model_dump_json()
-    assumptions_json = json.dumps(session.assumptions)
-    perpetuations_json = json.dumps(session.perpetuations)
-    solutions_json = json.dumps(session.solutions)
-    fears_json = json.dumps([fear.model_dump() for fear in session.fears])
-    ai_summary_json = json.dumps(session.ai_summary) if session.ai_summary else None
-
-    cursor.execute("""
-        INSERT INTO sessions (pain_point, issue_tree, assumptions, perpetuations, solutions, fears, action_plan, ai_summary, summary_header, user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (session.pain_point, issue_tree_json, assumptions_json, perpetuations_json, solutions_json, fears_json, session.action_plan, ai_summary_json, summary_header, user_id))
+    # Create session document
+    session_doc = {
+        "created_at": datetime.utcnow(),
+        "pain_point": session.pain_point,
+        "issue_tree": issue_tree.model_dump(),
+        "assumptions": session.assumptions,
+        "perpetuations": session.perpetuations,
+        "solutions": session.solutions,
+        "fears": [fear.model_dump() for fear in session.fears],
+        "action_plan": session.action_plan,
+        "ai_summary": session.ai_summary,
+        "summary_header": summary_header,
+        "user_id": user_id
+    }
     
-    session_id = cursor.lastrowid
-    conn.commit()
-    
-    # Retrieve the created_at value
-    cursor.execute("SELECT created_at FROM sessions WHERE id = ?", (session_id,))
-    created_at = cursor.fetchone()[0]
-    
-    conn.close()
+    result = await db.sessions.insert_one(session_doc)
+    session_id = str(result.inserted_id)
     
     return SessionRead(
         id=session_id,
-        created_at=created_at,
+        created_at=session_doc["created_at"].isoformat(),
         pain_point=session.pain_point,
         issue_tree=issue_tree,
         assumptions=session.assumptions,
@@ -443,72 +342,68 @@ async def create_session(session: SessionCreate, request: Request):
     )
 
 @app.get("/api/sessions", response_model=List[SessionRead])
-def get_sessions(request: Request):
+async def get_sessions(request: Request):
     # Get current user (optional for now to maintain compatibility)
-    current_user = get_current_user(request)
+    current_user = await get_current_user(request)
     
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    db = get_database()
     
     # If user is authenticated, show only their sessions; otherwise show all
     if current_user:
-        cursor.execute("SELECT id, created_at, pain_point, issue_tree, assumptions, perpetuations, solutions, fears, action_plan, ai_summary, summary_header FROM sessions WHERE user_id = ? ORDER BY created_at DESC", (current_user.id,))
+        cursor = db.sessions.find({"user_id": current_user.id}).sort("created_at", -1)
     else:
-        cursor.execute("SELECT id, created_at, pain_point, issue_tree, assumptions, perpetuations, solutions, fears, action_plan, ai_summary, summary_header FROM sessions ORDER BY created_at DESC")
-    
-    rows = cursor.fetchall()
-    conn.close()
+        cursor = db.sessions.find({}).sort("created_at", -1)
     
     sessions = []
-    for row in rows:
+    async for session_doc in cursor:
         sessions.append(SessionRead(
-            id=row["id"],
-            created_at=row["created_at"],
-            pain_point=row["pain_point"],
-            issue_tree=json.loads(row["issue_tree"]),
-            assumptions=json.loads(row["assumptions"]),
-            perpetuations=json.loads(row["perpetuations"]),
-            solutions=json.loads(row["solutions"]),
-            fears=json.loads(row["fears"]),
-            action_plan=row["action_plan"],
-            ai_summary=json.loads(row["ai_summary"]) if row["ai_summary"] else None,
-            summary_header=row["summary_header"]
+            id=str(session_doc["_id"]),
+            created_at=session_doc["created_at"].isoformat(),
+            pain_point=session_doc["pain_point"],
+            issue_tree=IssueTree(**session_doc["issue_tree"]),
+            assumptions=session_doc["assumptions"],
+            perpetuations=session_doc["perpetuations"],
+            solutions=session_doc["solutions"],
+            fears=[Fear(**fear) for fear in session_doc["fears"]],
+            action_plan=session_doc["action_plan"],
+            ai_summary=session_doc.get("ai_summary"),
+            summary_header=session_doc.get("summary_header")
         ))
+    
     return sessions
 
 @app.get("/api/sessions/{session_id}", response_model=SessionRead)
-def get_session(session_id: int, request: Request):
-    current_user = get_current_user(request)
+async def get_session(session_id: str, request: Request):
+    current_user = await get_current_user(request)
     
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    db = get_database()
+    
+    try:
+        object_id = ObjectId(session_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
     
     # If user is authenticated, ensure they can only access their own sessions
     if current_user:
-        cursor.execute("SELECT id, created_at, pain_point, issue_tree, assumptions, perpetuations, solutions, fears, action_plan, ai_summary, summary_header FROM sessions WHERE id = ? AND user_id = ?", (session_id, current_user.id))
+        session_doc = await db.sessions.find_one({"_id": object_id, "user_id": current_user.id})
     else:
-        cursor.execute("SELECT id, created_at, pain_point, issue_tree, assumptions, perpetuations, solutions, fears, action_plan, ai_summary, summary_header FROM sessions WHERE id = ?", (session_id,))
+        session_doc = await db.sessions.find_one({"_id": object_id})
     
-    row = cursor.fetchone()
-    conn.close()
-    
-    if not row:
+    if not session_doc:
         raise HTTPException(status_code=404, detail="Session not found")
     
     return SessionRead(
-        id=row["id"],
-        created_at=row["created_at"],
-        pain_point=row["pain_point"],
-        issue_tree=json.loads(row["issue_tree"]),
-        assumptions=json.loads(row["assumptions"]),
-        perpetuations=json.loads(row["perpetuations"]),
-        solutions=json.loads(row["solutions"]),
-        fears=json.loads(row["fears"]),
-        action_plan=row["action_plan"],
-        ai_summary=json.loads(row["ai_summary"]) if row["ai_summary"] else None,
-        summary_header=row["summary_header"]
+        id=str(session_doc["_id"]),
+        created_at=session_doc["created_at"].isoformat(),
+        pain_point=session_doc["pain_point"],
+        issue_tree=IssueTree(**session_doc["issue_tree"]),
+        assumptions=session_doc["assumptions"],
+        perpetuations=session_doc["perpetuations"],
+        solutions=session_doc["solutions"],
+        fears=[Fear(**fear) for fear in session_doc["fears"]],
+        action_plan=session_doc["action_plan"],
+        ai_summary=session_doc.get("ai_summary"),
+        summary_header=session_doc.get("summary_header")
     )
 
 # AI Endpoints
@@ -516,7 +411,7 @@ def get_session(session_id: int, request: Request):
 async def ai_assist(request: AIAssistRequest, current_request: Request):
     """Get AI assistance for a specific stage of the session"""
     # Get current user
-    current_user = get_current_user(current_request)
+    current_user = await get_current_user(current_request)
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
     
@@ -553,7 +448,7 @@ async def ai_assist(request: AIAssistRequest, current_request: Request):
 async def ai_summary(request: AISummaryRequest, current_request: Request):
     """Generate AI summary for a completed session"""
     # Get current user
-    current_user = get_current_user(current_request)
+    current_user = await get_current_user(current_request)
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
     
@@ -586,7 +481,7 @@ async def ai_summary(request: AISummaryRequest, current_request: Request):
 async def get_ai_usage(session_id: str, current_request: Request):
     """Get AI usage statistics for a session"""
     # Get current user
-    current_user = get_current_user(current_request)
+    current_user = await get_current_user(current_request)
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
     
