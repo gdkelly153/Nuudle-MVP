@@ -21,7 +21,7 @@ from ai_service import get_ai_response, get_ai_summary
 app = FastAPI()
 
 # Security configuration
-SECRET_KEY = secrets.token_urlsafe(32)  # Generate a random secret key
+SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret_key_for_development_only")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -145,10 +145,9 @@ def create_tables():
         )
     """)
     
-    # Create sessions table (keep existing structure)
-    cursor.execute("DROP TABLE IF EXISTS sessions")
+    # Create sessions table (keep existing structure) - safe initialization
     cursor.execute("""
-        CREATE TABLE sessions (
+        CREATE TABLE IF NOT EXISTS sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             pain_point TEXT,
