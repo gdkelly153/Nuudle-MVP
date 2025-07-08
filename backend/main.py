@@ -10,14 +10,23 @@ import os
 from dotenv import load_dotenv
 from bson import ObjectId
 
-# Load environment variables
-load_dotenv(dotenv_path="backend/.env")
+# Load environment variables - handle both local and production environments
+try:
+    load_dotenv(dotenv_path="backend/.env")  # Local development (from project root)
+except:
+    load_dotenv(dotenv_path=".env")  # Production fallback
 
-# Import database functions
-from backend.database import connect_to_mongo, close_mongo_connection, get_database
+# Import database functions - hybrid import for local/production compatibility
+try:
+    from backend.database import connect_to_mongo, close_mongo_connection, get_database
+except ImportError:
+    from database import connect_to_mongo, close_mongo_connection, get_database
 
-# Import AI service functions
-from backend.ai_service import get_ai_response, get_ai_summary
+# Import AI service functions - hybrid import for local/production compatibility
+try:
+    from backend.ai_service import get_ai_response, get_ai_summary
+except ImportError:
+    from ai_service import get_ai_response, get_ai_summary
 
 app = FastAPI()
 
@@ -486,8 +495,11 @@ async def get_ai_usage(session_id: str, current_request: Request):
         raise HTTPException(status_code=401, detail="Authentication required")
     
     try:
-        # Import the check_rate_limits function from ai_service
-        from backend.ai_service import check_rate_limits
+        # Import the check_rate_limits function from ai_service - hybrid import
+        try:
+            from backend.ai_service import check_rate_limits
+        except ImportError:
+            from ai_service import check_rate_limits
         
         usage_data = await check_rate_limits(current_user.id, session_id)
         

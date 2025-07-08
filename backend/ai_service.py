@@ -4,7 +4,11 @@ import random
 from typing import Dict, List, Optional, Any
 from anthropic import Anthropic
 from datetime import datetime
-from backend.database import get_database
+# Import database functions - hybrid import for local/production compatibility
+try:
+    from backend.database import get_database
+except ImportError:
+    from database import get_database
 
 # Initialize Anthropic client
 anthropic = Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
