@@ -11,13 +11,13 @@ from dotenv import load_dotenv
 from bson import ObjectId
 
 # Load environment variables
-load_dotenv()
+load_dotenv(dotenv_path="backend/.env")
 
 # Import database functions
-from database import connect_to_mongo, close_mongo_connection, get_database
+from backend.database import connect_to_mongo, close_mongo_connection, get_database
 
 # Import AI service functions
-from ai_service import get_ai_response, get_ai_summary
+from backend.ai_service import get_ai_response, get_ai_summary
 
 app = FastAPI()
 
@@ -487,7 +487,7 @@ async def get_ai_usage(session_id: str, current_request: Request):
     
     try:
         # Import the check_rate_limits function from ai_service
-        from ai_service import check_rate_limits
+        from backend.ai_service import check_rate_limits
         
         usage_data = await check_rate_limits(current_user.id, session_id)
         

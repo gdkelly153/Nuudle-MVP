@@ -4,7 +4,7 @@ import random
 from typing import Dict, List, Optional, Any
 from anthropic import Anthropic
 from datetime import datetime
-from database import get_database
+from backend.database import get_database
 
 # Initialize Anthropic client
 anthropic = Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
@@ -92,6 +92,8 @@ PROMPTS = {
         "body": """{{dynamic_intro}}
 
 Assume the role of a strategic coach. Your entire response MUST be a seamless, conversational narrative.
+
+**CRITICAL INSTRUCTION:** The following examples are for structural guidance only. Your analysis and response MUST be based *entirely* on the user's provided input in '{{userInput}}' and '{{causes}}'. Do not let the example topics influence your response. Your goal is to apply the *structure* of the examples to the *user's specific situation*.
 
 For each action from '{{userInput}}', you MUST generate a single, distinct bullet point. CRITICAL: You MUST NOT start any bullet point with a summary or bolded text. Instead, weave the user's idea directly into a flowing conversational sentence. Inside each bullet point, you MUST follow this logic:
 1. **Intent Analysis:** First, check if the user has already stated a clear, root-cause-oriented intent for the action.
