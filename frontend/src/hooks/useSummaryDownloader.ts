@@ -79,18 +79,56 @@ export const useSummaryDownloader = () => {
   const downloadAsPDF = async (sessionId: string, elementId: string = 'summary-content') => {
     if (!summaryData) return;
     
+    let clonedElement: HTMLElement | null = null;
+    
     try {
       // Dynamic import to reduce bundle size
       const jsPDF = (await import('jspdf')).default;
       const html2canvas = (await import('html2canvas')).default;
       
-      const element = document.getElementById(elementId);
-      if (!element) return;
+      const originalElement = document.getElementById(elementId);
+      if (!originalElement) return;
       
-      const canvas = await html2canvas(element, {
+      // Create an off-screen clone for full content capture
+      clonedElement = originalElement.cloneNode(true) as HTMLElement;
+      
+      // Position the clone off-screen and ensure it renders at full height
+      clonedElement.style.position = 'absolute';
+      clonedElement.style.top = '-9999px';
+      clonedElement.style.left = '-9999px';
+      clonedElement.style.zIndex = '-1';
+      clonedElement.style.height = 'auto';
+      clonedElement.style.maxHeight = 'none';
+      clonedElement.style.overflow = 'visible';
+      clonedElement.style.width = originalElement.offsetWidth + 'px'; // Maintain original width
+      
+      // Find and modify any nested elements that might have height/overflow constraints
+      const modalContent = clonedElement.querySelector('.modal-content');
+      if (modalContent) {
+        (modalContent as HTMLElement).style.height = 'auto';
+        (modalContent as HTMLElement).style.maxHeight = 'none';
+        (modalContent as HTMLElement).style.overflow = 'visible';
+      }
+      
+      const summaryContent = clonedElement.querySelector('.summary-content');
+      if (summaryContent) {
+        (summaryContent as HTMLElement).style.height = 'auto';
+        (summaryContent as HTMLElement).style.maxHeight = 'none';
+        (summaryContent as HTMLElement).style.overflow = 'visible';
+      }
+      
+      // Append to body to render
+      document.body.appendChild(clonedElement);
+      
+      // Give the browser a moment to render the clone
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const canvas = await html2canvas(clonedElement, {
         scale: 2,
         useCORS: true,
         allowTaint: true,
+        height: clonedElement.scrollHeight,
+        width: clonedElement.scrollWidth,
       });
       
       const imgData = canvas.toDataURL('image/png');
@@ -115,21 +153,64 @@ export const useSummaryDownloader = () => {
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Failed to generate PDF. Please try again.');
+    } finally {
+      // Always clean up the cloned element
+      if (clonedElement && clonedElement.parentNode) {
+        clonedElement.parentNode.removeChild(clonedElement);
+      }
     }
   };
 
   const saveAsImage = async (sessionId: string, elementId: string = 'summary-content') => {
     if (!summaryData) return;
     
+    let clonedElement: HTMLElement | null = null;
+    
     try {
       const html2canvas = (await import('html2canvas')).default;
-      const element = document.getElementById(elementId);
-      if (!element) return;
+      const originalElement = document.getElementById(elementId);
+      if (!originalElement) return;
       
-      const canvas = await html2canvas(element, {
+      // Create an off-screen clone for full content capture
+      clonedElement = originalElement.cloneNode(true) as HTMLElement;
+      
+      // Position the clone off-screen and ensure it renders at full height
+      clonedElement.style.position = 'absolute';
+      clonedElement.style.top = '-9999px';
+      clonedElement.style.left = '-9999px';
+      clonedElement.style.zIndex = '-1';
+      clonedElement.style.height = 'auto';
+      clonedElement.style.maxHeight = 'none';
+      clonedElement.style.overflow = 'visible';
+      clonedElement.style.width = originalElement.offsetWidth + 'px'; // Maintain original width
+      
+      // Find and modify any nested elements that might have height/overflow constraints
+      const modalContent = clonedElement.querySelector('.modal-content');
+      if (modalContent) {
+        (modalContent as HTMLElement).style.height = 'auto';
+        (modalContent as HTMLElement).style.maxHeight = 'none';
+        (modalContent as HTMLElement).style.overflow = 'visible';
+      }
+      
+      const summaryContent = clonedElement.querySelector('.summary-content');
+      if (summaryContent) {
+        (summaryContent as HTMLElement).style.height = 'auto';
+        (summaryContent as HTMLElement).style.maxHeight = 'none';
+        (summaryContent as HTMLElement).style.overflow = 'visible';
+      }
+      
+      // Append to body to render
+      document.body.appendChild(clonedElement);
+      
+      // Give the browser a moment to render the clone
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const canvas = await html2canvas(clonedElement, {
         scale: 2,
         useCORS: true,
         allowTaint: true,
+        height: clonedElement.scrollHeight,
+        width: clonedElement.scrollWidth,
       });
       
       canvas.toBlob((blob: Blob | null) => {
@@ -145,6 +226,11 @@ export const useSummaryDownloader = () => {
     } catch (error) {
       console.error('Error generating image:', error);
       alert('Failed to generate image. Please try again.');
+    } finally {
+      // Always clean up the cloned element
+      if (clonedElement && clonedElement.parentNode) {
+        clonedElement.parentNode.removeChild(clonedElement);
+      }
     }
   };
 
