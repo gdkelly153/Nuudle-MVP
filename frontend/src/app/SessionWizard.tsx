@@ -350,6 +350,28 @@ useEffect(() => {
     }
   }, [ai.getCurrentResponse(), step, ai.loadingStage]);
 
+  // Helper function to determine if input is goal-oriented
+  const isInputGoalOriented = (text: string): boolean => {
+    const trimmedText = text.trim().toLowerCase();
+    
+    // Goal-oriented keywords and phrases
+    const goalKeywords = [
+      'want to', 'wanna', 'like to', 'hope to', 'aim to', 'need to',
+      'my goal is', 'i wish', 'i would like', 'i need', 'i want',
+      'can i', 'how to', 'how do i', 'how can i', 'trying to',
+      'would love to', 'looking to', 'seeking to', 'planning to'
+    ];
+    
+    // Check if the text contains goal-oriented phrases
+    for (const keyword of goalKeywords) {
+      if (trimmedText.includes(keyword)) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
+
   // Helper function to determine if problem statement is good enough for "Begin" button
   const isProblemSimplistic = (text: string): boolean => {
     const trimmedText = text.trim().toLowerCase();
@@ -929,7 +951,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
         .guidance-hint-container {
           display: flex;
           justify-content: center;
-          margin-bottom: 1rem;
+          margin-top: 1rem;
         }
         .guidance-hint {
           background-color: var(--guidance-hint-bg);
@@ -997,9 +1019,13 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                 <div className="guidance-hint-container mt-2">
                   <div className="guidance-hint">
                     <p>
-                      {guidanceHintShownCount === 1
-                        ? "Please add more detail to your problem statement to proceed, or click \"Help Me Nuudle\" for assistance."
-                        : "That's a good start, but more context is still needed to continue. Try to be more specific, or click \"Help Me Nuudle\" for guidance."
+                      {isInputGoalOriented(painPoint)
+                        ? guidanceHintShownCount === 1
+                          ? "To get the most out of this process, try describing the problem you're facing rather than the goal you want to achieve. For example, instead of 'I want to sleep better,' try 'I struggle to fall asleep at night.' Click \"Help Me Nuudle\" for assistance with this."
+                          : "Remember to focus on the problem itself rather than your desired outcome. Click \"Help Me Nuudle\" for guidance on reframing your statement."
+                        : guidanceHintShownCount === 1
+                          ? "Please add more detail to your problem statement to proceed, or click \"Help Me Nuudle\" for assistance."
+                          : "That's a good start, but more context is still needed to continue. Try to be more specific, or click \"Help Me Nuudle\" for guidance."
                       }
                     </p>
                   </div>
@@ -1014,10 +1040,13 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
               onClick={() => {
                 // Clear guidance hint when AI is triggered
                 setShowGuidanceHint(false);
-                // Always use the enhanced intervention prompt for consistent, intelligent responses
-                ai.requestAssistance("problem_articulation_intervention", painPoint, { painPoint });
+                // Determine the correct stage based on whether input is goal-oriented
+                const stage = isInputGoalOriented(painPoint)
+                  ? "problem_articulation_intervention_goal"
+                  : "problem_articulation_intervention";
+                ai.requestAssistance(stage, painPoint, { painPoint });
               }}
-              isLoading={ai.loadingStage === 'problem_articulation_direct' || ai.loadingStage === 'problem_articulation_intervention' || ai.loadingStage === 'problem_articulation_context_aware'}
+              isLoading={ai.loadingStage === 'problem_articulation_direct' || ai.loadingStage === 'problem_articulation_intervention' || ai.loadingStage === 'problem_articulation_intervention_goal' || ai.loadingStage === 'problem_articulation_context_aware'}
               disabled={!painPoint.trim() || !ai.canUseAI('problem_articulation_direct')}
               currentStep={step}
               buttonStep={0}
@@ -1035,6 +1064,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
               response={ai.getCurrentResponse()!}
               stage={ai.loadingStage === 'problem_articulation_direct' ? 'problem_articulation_direct' :
                      ai.loadingStage === 'problem_articulation_intervention' ? 'problem_articulation_intervention' :
+                     ai.loadingStage === 'problem_articulation_intervention_goal' ? 'problem_articulation_intervention_goal' :
                      'problem_articulation_context_aware'}
               onDismiss={ai.dismissResponse}
               onFeedback={ai.provideFeedback}

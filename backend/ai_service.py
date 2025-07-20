@@ -141,6 +141,28 @@ def is_problem_well_articulated(text: str) -> bool:
     
     return word_count >= 10 and has_general_context and has_deeper_context
 
+def is_input_goal_oriented(text: str) -> bool:
+    """
+    Detects if the user's input is framed as a goal rather than a problem.
+    Returns True if the input contains goal-oriented language.
+    """
+    trimmed_text = text.strip().lower()
+    
+    # Goal-oriented keywords and phrases
+    goal_keywords = [
+        'want to', 'wanna', 'like to', 'hope to', 'aim to', 'need to',
+        'my goal is', 'i wish', 'i would like', 'i need', 'i want',
+        'can i', 'how to', 'how do i', 'how can i', 'trying to',
+        'would love to', 'looking to', 'seeking to', 'planning to'
+    ]
+    
+    # Check if the text contains goal-oriented phrases
+    for keyword in goal_keywords:
+        if keyword in trimmed_text:
+            return True
+            
+    return False
+
 def is_problem_simplistic(text: str) -> bool:
     """
     Legacy function maintained for backward compatibility.
@@ -166,7 +188,25 @@ PROMPTS = {
             "Take a moment to integrate these details into your problem statement.",
             "Please expand on your problem description using these new insights to proceed."
         ],
-        "body": "Your goal is to generate 2-3 simple, open-ended questions that help the user provide more specific, descriptive context about their situation. Your questions must be assumption-free and work whether the user is engaging in the activity frequently, infrequently, or not at all. Focus on understanding the user's current reality and their motivations.\n\nGenerate thoughtful questions that feel contextually relevant to what the user has shared in '{{userInput}}'. Avoid formulaic or repetitive questions. Present your questions as a bulleted list using '- ' for each point."
+        "body": "Your goal is to generate 2-3 simple, open-ended questions that help the user provide more specific, descriptive context about their situation. Your questions must be assumption-free and work whether the user is engaging in the activity frequently, infrequently, or not at all. Focus on understanding the user's current reality.\n\nGenerate thoughtful questions that feel contextually relevant to what the user has shared in '{{userInput}}'. Avoid formulaic or repetitive questions. Present your questions as a bulleted list using '- ' for each point."
+    },
+    
+    "problem_articulation_intervention_goal": {
+        "intros": [
+            "That's a great goal to have. To help you get there, let's first identify the specific problem that's getting in your way.",
+            "Let's explore what's currently standing in your way. Understanding the obstacles will help us develop a more targeted approach.",
+            "That sounds like an important goal. To create an effective plan, we need to understand the underlying problem first.",
+            "Good goal. Now let's identify the specific challenge or obstacle that's making this goal necessary.",
+            "I understand what you're aiming for. Let's explore what problem or situation is driving this need."
+        ],
+        "conclusions": [
+            "Try reframing your goal as a problem statement - describe what's currently not working or what obstacles you're encountering in your daily life. Please update your problem description above with this new framing.",
+            "Consider describing this as a problem you're facing - what specific challenges or barriers are you experiencing right now? Please revise your statement above to reflect this problem-focused approach.",
+            "It would help to rephrase this as a problem by focusing on what's currently difficult or not working in your situation. Please update your description above using this new perspective.",
+            "Think about expressing this as a problem statement - what's currently preventing you from where you want to be, and what does that look like day-to-day? Please revise your problem description above with these insights.",
+            "Try restating this as a problem you're experiencing - describe the specific challenges or frustrations you're dealing with in your current circumstances. Please update your problem statement above accordingly."
+        ],
+        "body": "The user has stated a goal in '{{userInput}}'. Your task is to help them identify the underlying problem that makes this goal necessary. Generate 2-3 questions that help them shift from goal-thinking to problem-thinking. Focus on understanding what's currently happening that they want to change, what obstacles they're facing, or what situation is driving this need. Your questions should help them articulate the specific problem or challenge behind their stated goal.\n\nGenerate thoughtful questions that feel contextually relevant to their goal. Present your questions as a bulleted list using '- ' for each point.\n\nCRITICAL: Your response must contain ONLY the 2-3 questions you generate, formatted as a markdown bulleted list using '- '. Do not add any other text, headers, intros, or conclusions."
     },
     
     "problem_articulation_context_aware": {
@@ -184,7 +224,25 @@ PROMPTS = {
             "Take a moment to integrate these details into your problem statement.",
             "Please expand on your problem description using these new insights to proceed."
         ],
-        "body": "{{dynamic_intro}}\n\nYour main goal is to help the user expand on their problem statement by providing more specific, descriptive context. To do this, you will generate 2-3 tailored, open-ended questions based on the following logic:\n\na) First, identify the core problem or behavior. The user might state their goal (e.g., \"I want to drink less\"). Your task is to ask questions about the underlying behavior (the drinking itself), not just the desire for change.\n\nb) Then, analyze the user's statement in '{{userInput}}' for basic context. Have they already clearly mentioned the 'what', 'where', 'when', or 'who' of the core problem?\n\nc) Finally, generate your questions based on your analysis:\n   - If basic context is MISSING: Ask questions about the core problem to fill in those specific gaps (e.g., \"When does the drinking typically happen?\").\n   - If basic context is ALREADY PROVIDED: Do NOT ask for it again. Instead, ask deeper, more descriptive questions that encourage the user to describe what the problem actually looks and feels like. Prompt them to describe a typical scenario or the specific thoughts and feelings involved. For example, if the user says they \"struggle to fall asleep in bed,\" a good follow-up would be, \"Can you walk me through what a typical night of 'bad sleep' looks like for you from start to finish?\"\n\nDo NOT ask 'why' and do NOT suggest any causal factors.\n\n{{dynamic_conclusion}}\n\nCRITICAL: Do NOT add any other text, formatting, or conversational filler. Your entire response must be only the chosen intro, the questions, and the chosen conclusion."
+        "body": "{{dynamic_intro}}\n\nYour main goal is to help the user expand on their problem statement by providing more specific, descriptive context. To do this, you will generate 2-3 tailored, open-ended questions based on the following logic:\n\na) First, identify the core problem or behavior. The user might state their problem (e.g., \"I drink too much\"). Your task is to ask questions about the underlying behavior (the drinking itself), to better understand the problem.\n\nb) Then, analyze the user's statement in '{{userInput}}' for basic context. Have they already clearly mentioned the 'what', 'where', 'when', or 'who' of the core problem?\n\nc) Finally, generate your questions based on your analysis:\n   - If basic context is MISSING: Ask questions about the core problem to fill in those specific gaps (e.g., \"When does the drinking typically happen?\").\n   - If basic context is ALREADY PROVIDED: Do NOT ask for it again. Instead, ask deeper, more descriptive questions that encourage the user to describe what the problem actually looks and feels like. Prompt them to describe a typical scenario or the specific thoughts and feelings involved. For example, if the user says they \"struggle to fall asleep in bed,\" a good follow-up would be, \"Can you walk me through what a typical night of 'bad sleep' looks like for you from start to finish?\"\n\nDo NOT ask 'why' and do NOT suggest any causal factors.\n\n{{dynamic_conclusion}}\n\nCRITICAL: Do NOT add any other text, formatting, or conversational filler. Your entire response must be only the chosen intro, the questions, and the chosen conclusion."
+    },
+    
+    "problem_articulation_context_aware_goal": {
+        "intros": [
+            "That's a meaningful goal. To help you achieve it, let's first clearly define the problem that's making this goal necessary.",
+            "I understand what you want to accomplish. Let's dig into the specific challenge or situation that's driving this need.",
+            "That sounds important to you. To create the most effective path forward, we need to identify the underlying problem first.",
+            "Good goal. Now let's explore what's currently happening that makes you want to achieve this.",
+            "I can see why that matters to you. Let's identify the specific problem or obstacle that's in your way."
+        ],
+        "conclusions": [
+            "Try reframing your goal as a problem statement - describe what's currently not working or what obstacles you're encountering in your daily life. Please update your problem description above with this new framing.",
+            "Consider describing this as a problem you're facing - what specific challenges or barriers are you experiencing right now? Please revise your statement above to reflect this problem-focused approach.",
+            "It would help to rephrase this as a problem by focusing on what's currently difficult or not working in your situation. Please update your description above using this new perspective.",
+            "Think about expressing this as a problem statement - what's currently preventing you from where you want to be, and what does that look like day-to-day? Please revise your problem description above with these insights.",
+            "Try restating this as a problem you're experiencing - describe the specific challenges or frustrations you're dealing with in your current circumstances. Please update your problem statement above accordingly."
+        ],
+        "body": "The user has stated a goal in '{{userInput}}'. Your main task is to help them identify and articulate the underlying problem that makes this goal necessary. Generate 2-3 tailored, open-ended questions that help them shift from goal-thinking to problem-thinking.\n\nFocus on understanding:\n- What's currently happening that they want to change?\n- What specific obstacles or challenges are they facing?\n- What situation or behavior is driving this need for change?\n\nYour questions should help them articulate the specific problem or challenge behind their stated goal. Avoid asking about motivations or 'why' they want the goal - instead focus on the current reality that makes the goal necessary.\n\nGenerate thoughtful questions that feel contextually relevant to their goal. Present your questions as a bulleted list using '- ' for each point.\n\nCRITICAL: Your response must contain ONLY the 2-3 questions you generate, formatted as a markdown bulleted list using '- '. Do not add any other text, headers, intros, or conclusions."
     },
     
     "root_cause": {
@@ -603,6 +661,8 @@ async def get_ai_response(user_id: str, session_id: str, stage: str, user_input:
     if stage == 'identify_assumptions' and is_assumption_input_empty_or_irrelevant(user_input, session_context.get('causes', [])):
         actual_stage = 'identify_assumptions_discovery'
     
+    # No need for special handling - frontend now sends the correct stage directly
+    
     prompt_config = PROMPTS.get(actual_stage)
     
     if not prompt_config:
@@ -611,8 +671,8 @@ async def get_ai_response(user_id: str, session_id: str, stage: str, user_input:
         # Handle legacy string prompts
         prompt = prompt_config
     elif isinstance(prompt_config, dict) and 'body' in prompt_config:
-        # Special handling for problem_articulation_intervention
-        if actual_stage == 'problem_articulation_intervention':
+        # Special handling for problem_articulation_intervention and goal variants
+        if actual_stage in ['problem_articulation_intervention', 'problem_articulation_intervention_goal', 'problem_articulation_context_aware_goal']:
             # First, check if the input is well-articulated using Tier 2 validation
             if is_problem_well_articulated(processed_user_input):
                 # Input is well-articulated, return validation message immediately
@@ -713,9 +773,9 @@ Your conversational response begins now:"""
     try:
         ai_result = await get_claude_response(prompt)
         
-        # Special post-processing for problem_articulation_intervention
+        # Special post-processing for problem_articulation_intervention and goal variants
         final_response = ai_result["responseText"]
-        if actual_stage == 'problem_articulation_intervention':
+        if actual_stage in ['problem_articulation_intervention', 'problem_articulation_intervention_goal', 'problem_articulation_context_aware_goal']:
             # Wrap the AI's questions with randomly selected intro and conclusion
             random_intro = random.choice(prompt_config['intros'])
             random_conclusion = random.choice(prompt_config['conclusions'])
