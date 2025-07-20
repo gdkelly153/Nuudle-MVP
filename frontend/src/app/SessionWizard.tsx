@@ -24,6 +24,8 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
   const searchParams = useSearchParams();
   const [painPoint, setPainPoint] = useState("");
   const [step, setStep] = useState(0);
+  const [showGuidanceHint, setShowGuidanceHint] = useState(false);
+  const [guidanceHintShownCount, setGuidanceHintShownCount] = useState(0);
   const [causes, setCauses] = useState([{ cause: "", assumption: "" }]);
   const [solutions, setSolutions] = useState<{ [id: string]: string }>({});
   const [highlightedContainerId, setHighlightedContainerId] = useState<string | null>(null);
@@ -348,52 +350,82 @@ useEffect(() => {
     }
   }, [ai.getCurrentResponse(), step, ai.loadingStage]);
 
-  // Helper function to determine if problem statement is too simplistic
+  // Helper function to determine if problem statement is good enough for "Begin" button
   const isProblemSimplistic = (text: string): boolean => {
     const trimmedText = text.trim().toLowerCase();
     
-    // Check for contextual keywords that indicate a well-defined problem
-    const contextualKeywords = [
-      // What indicators
-      'what', 'which', 'how',
-      // Where indicators
-      'where', 'location', 'place', 'at work', 'at home', 'in',
-      // When indicators
-      'when', 'time', 'during', 'while', 'after', 'before', 'daily', 'weekly', 'monthly',
-      // Purpose/outcome indicators (so that)
-      'so that', 'in order to', 'to achieve', 'because', 'since', 'due to', 'for the purpose',
-      'to ensure', 'to improve', 'to reduce', 'to increase', 'to help', 'to make',
-      // Additional context indicators
-      'specifically', 'particularly', 'especially', 'regarding', 'concerning', 'about',
-      'involving', 'related to', 'with respect to'
+    // Problem keywords - identify core issues/goals
+    const problemKeywords = [
+      // Health & wellness
+      'sleep', 'exercise', 'eat', 'eating', 'diet', 'weight', 'health', 'fitness', 'stress',
+      'anxiety', 'depression', 'tired', 'energy', 'pain', 'sick', 'illness',
+      // Work & productivity
+      'work', 'job', 'career', 'productivity', 'procrastinate', 'focus', 'concentrate',
+      'deadline', 'meeting', 'boss', 'colleague', 'project', 'task', 'organize',
+      // Relationships & social
+      'relationship', 'partner', 'spouse', 'friend', 'family', 'parent', 'child',
+      'communication', 'argue', 'conflict', 'lonely', 'social', 'dating',
+      // Personal development
+      'habit', 'routine', 'goal', 'motivation', 'confidence', 'self-esteem', 'learn',
+      'skill', 'improve', 'change', 'grow', 'develop', 'practice',
+      // Financial
+      'money', 'budget', 'save', 'spend', 'debt', 'financial', 'income', 'expense',
+      // Time & organization
+      'time', 'schedule', 'busy', 'overwhelmed', 'balance', 'priority', 'manage'
     ];
     
-    // Count how many contextual keywords are present
-    const keywordCount = contextualKeywords.filter(keyword =>
-      trimmedText.includes(keyword)
-    ).length;
+    // Context keywords - provide descriptive detail about the problem
+    const contextKeywords = [
+      // Descriptive circumstances
+      'when', 'where', 'during', 'while', 'after', 'before', 'at work', 'at home',
+      'in the morning', 'at night', 'daily', 'weekly', 'every time', 'always', 'never',
+      'often', 'sometimes', 'usually', 'frequently', 'rarely',
+      // Emotional/physical states
+      'feel', 'feeling', 'struggle', 'hard', 'difficult', 'easy', 'challenging',
+      'frustrated', 'overwhelmed', 'anxious', 'worried', 'stressed', 'tired', 'exhausted',
+      'motivated', 'unmotivated', 'confident', 'insecure',
+      // Specific details & constraints
+      'can\'t', 'cannot', 'don\'t', 'won\'t', 'unable', 'try', 'trying', 'attempt',
+      'fail', 'failing', 'succeed', 'successful', 'unsuccessful', 'stuck', 'blocked',
+      // Causal/explanatory
+      'because', 'since', 'due to', 'caused by', 'leads to', 'results in',
+      'so that', 'in order to', 'to achieve', 'to help', 'to improve',
+      // Quantitative/specific
+      'too much', 'too little', 'not enough', 'more than', 'less than', 'about',
+      'around', 'approximately', 'exactly', 'specifically', 'particularly'
+    ];
     
-    // Also check for question words that indicate specificity
+    // Check for presence of both problem and context keywords
+    const hasProblemKeyword = problemKeywords.some(keyword => trimmedText.includes(keyword));
+    const hasContextKeyword = contextKeywords.some(keyword => trimmedText.includes(keyword));
+    
+    // Also check for question words as they often indicate context
     const questionWords = ['who', 'what', 'where', 'when', 'why', 'how'];
     const hasQuestionWords = questionWords.some(word => trimmedText.includes(word));
     
-    // Consider it simplistic if:
-    // 1. Very short (less than 5 words)
-    // 2. No contextual keywords AND no question words
-    // 3. Less than 2 contextual indicators
+    // Context-Pair Analysis criteria:
+    // 1. Very short (less than 5 words) = too simplistic
+    // 2. Must have both a problem keyword AND (context keyword OR question words)
     const wordCount = trimmedText.split(/\s+/).length;
     
-    return wordCount < 5 || (keywordCount === 0 && !hasQuestionWords) || keywordCount < 2;
+    if (wordCount < 5) {
+      return true; // too simplistic
+    }
+    
+    return !(hasProblemKeyword && (hasContextKeyword || hasQuestionWords));
   };
 
   const startSession = () => {
     if (painPoint.trim()) {
       // Check if the problem statement is too simplistic
       if (isProblemSimplistic(painPoint)) {
-        // Automatically trigger AI assistance to help elaborate the problem with intervention prompt
-        ai.requestAssistance("problem_articulation_intervention", painPoint, { painPoint });
+        // Show guidance hint instead of automatically triggering AI
+        setShowGuidanceHint(true);
+        setGuidanceHintShownCount(prev => prev + 1);
       } else {
         // Problem statement has sufficient context, proceed to step 1
+        setShowGuidanceHint(false);
+        setGuidanceHintShownCount(0); // Reset counter when user successfully proceeds
         setStep(1);
       }
     }
@@ -892,6 +924,45 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
         .action-textarea-container .item-label {
           margin-bottom: 4px !important;
         }
+        
+        /* Guidance hint styles */
+        .guidance-hint-container {
+          display: flex;
+          justify-content: center;
+          margin-bottom: 1rem;
+        }
+        .guidance-hint {
+          background-color: var(--guidance-hint-bg);
+          border: 1px solid var(--golden-mustard);
+          border-radius: 8px;
+          padding: 0.75rem 1rem;
+          color: var(--text-primary);
+          font-size: 0.875rem;
+          max-width: 500px;
+          text-align: center;
+        }
+        .guidance-hint p {
+          margin: 0;
+        }
+        
+        /* Highlighted button styles */
+        .help-me-nuudle-button-container.highlighted {
+          animation: pulse-glow 2s infinite;
+          border-radius: 12px;
+        }
+        .landing-button.highlighted {
+          box-shadow: 0 0 0 3px var(--refined-balance-teal-focus);
+          border-color: var(--refined-balance-teal);
+        }
+        
+        @keyframes pulse-glow {
+          0%, 100% {
+            box-shadow: 0 0 0 0 var(--refined-balance-teal-focus);
+          }
+          50% {
+            box-shadow: 0 0 0 8px rgba(65, 173, 176, 0.1);
+          }
+        }
       `}</style>
       <main className="wizard-container">
         <div className="content-wrapper" ref={contentWrapperRef}>
@@ -908,6 +979,8 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
     value={painPoint}
     onChange={(e) => {
       setPainPoint(e.target.value);
+      // Clear guidance hint when user starts typing
+      setShowGuidanceHint(false);
       // Clear all possible problem articulation stages since we don't know which one will be used
       ai.clearResponseForStage('problem_articulation_direct');
       ai.clearResponseForStage('problem_articulation_intervention');
@@ -920,6 +993,18 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
   />
 </div>
               </div>
+              {showGuidanceHint && (
+                <div className="guidance-hint-container mt-2">
+                  <div className="guidance-hint">
+                    <p>
+                      {guidanceHintShownCount === 1
+                        ? "Please add more detail to your problem statement to proceed, or click \"Help Me Nuudle\" for assistance."
+                        : "That's a good start, but more context is still needed to continue. Try to be more specific, or click \"Help Me Nuudle\" for guidance."
+                      }
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="button-container justify-start mt-2">
               </div>
             </div>
@@ -927,17 +1012,16 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
           <div className="button-container">
             <HelpMeNuudleButton
               onClick={() => {
-                // Use the same logic as the Begin button to determine which prompt to use
-                if (isProblemSimplistic(painPoint)) {
-                  ai.requestAssistance("problem_articulation_intervention", painPoint, { painPoint });
-                } else {
-                  ai.requestAssistance("problem_articulation_context_aware", painPoint, { painPoint });
-                }
+                // Clear guidance hint when AI is triggered
+                setShowGuidanceHint(false);
+                // Always use the enhanced intervention prompt for consistent, intelligent responses
+                ai.requestAssistance("problem_articulation_intervention", painPoint, { painPoint });
               }}
               isLoading={ai.loadingStage === 'problem_articulation_direct' || ai.loadingStage === 'problem_articulation_intervention' || ai.loadingStage === 'problem_articulation_context_aware'}
               disabled={!painPoint.trim() || !ai.canUseAI('problem_articulation_direct')}
               currentStep={step}
               buttonStep={0}
+              isHighlighted={showGuidanceHint}
             />
             <Tooltip text="Attempt the prompt to proceed." isDisabled={step === 0 && !painPoint.trim()}>
               <button type="button" onClick={startSession} disabled={step !== 0 || !painPoint.trim()} className="landing-button">

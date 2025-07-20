@@ -23,6 +23,9 @@
   --border-light: var(--border-medium);
   --border-medium: rgba(198, 165, 95, 0.6);
   
+  /* Guidance hint background - theme-aware */
+  --guidance-hint-bg: #F7F2E9;
+  
   /* Legacy variables for compatibility */
   --background: #FDF9F4;
   --foreground: #333333;
@@ -37,6 +40,9 @@
   --text-tertiary: #777777;
   --border-light: #333333;
   --border-medium: rgba(198, 165, 95, 0.3);
+  
+  /* Guidance hint background - dark mode */
+  --guidance-hint-bg: rgba(198, 165, 95, 0.25);
   
   /* Dark mode specific icon colors - less jarring */
   --refined-balance-teal-dark: #368D90;

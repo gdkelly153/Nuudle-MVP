@@ -24,6 +24,7 @@ interface HelpMeNuudleButtonProps {
   isLoading: boolean;
   currentStep: number;
   buttonStep: number;
+  isHighlighted?: boolean;
 }
 
 export const HelpMeNuudleButton: React.FC<HelpMeNuudleButtonProps> = ({
@@ -31,7 +32,8 @@ export const HelpMeNuudleButton: React.FC<HelpMeNuudleButtonProps> = ({
   disabled,
   isLoading,
   currentStep,
-  buttonStep
+  buttonStep,
+  isHighlighted = false
 }) => {
   const isCorrectStep = currentStep === buttonStep;
   const isButtonDisabled = !isCorrectStep || disabled || isLoading;
@@ -39,12 +41,12 @@ export const HelpMeNuudleButton: React.FC<HelpMeNuudleButtonProps> = ({
 
   return (
     <Tooltip text="Attempt the prompt to utilize me." isDisabled={tooltipShouldBeEnabled}>
-      <div className="help-me-nuudle-button-container inline-block">
+      <div className={`help-me-nuudle-button-container inline-block ${isHighlighted ? 'highlighted' : ''}`}>
         <BrainIconWithAnimation size={20} className="text-blue-600" />
         <button
           onClick={onClick}
           disabled={isButtonDisabled}
-          className="button landing-button"
+          className={`button landing-button ${isHighlighted ? 'highlighted' : ''}`}
         >
           {isLoading ? (
             'Nuudling...'

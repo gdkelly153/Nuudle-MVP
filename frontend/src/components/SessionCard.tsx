@@ -4,7 +4,7 @@ import { useSummaryDownloader, type SessionData, type SummaryData } from "@/hook
 
 interface SessionProps {
   session: {
-    _id: string;
+    id: string;
     created_at: string;
     pain_point: string;
     issue_tree: {
@@ -40,31 +40,34 @@ const SessionCard: React.FC<SessionProps> = ({ session, onViewSummary, onDelete,
     e.preventDefault();
     e.stopPropagation();
     
-    if (session.ai_summary && !summaryDownloader.summaryData) {
-      // Use saved AI summary
-      summaryDownloader.setSummaryData(session.ai_summary);
-      await summaryDownloader.downloadAsPDF(`session_${session._id}`);
-    } else if (!summaryDownloader.summaryData) {
-      // Fallback: Generate summary for old sessions without saved summaries
-      setIsGenerating(true);
-      const sessionData: SessionData = {
-        pain_point: session.pain_point,
-        causes: [session.issue_tree.primary_cause, ...session.issue_tree.sub_causes],
-        assumptions: session.assumptions,
-        perpetuations: session.perpetuations,
-        solutions: session.solutions,
-        fears: session.fears,
-        action_plan: session.action_plan,
-      };
-      
-      const summary = await summaryDownloader.generateSummary(`session_${session._id}`, sessionData);
-      setIsGenerating(false);
-      
-      if (summary) {
-        await summaryDownloader.downloadAsPDF(`session_${session._id}`);
+    try {
+      if (session.ai_summary) {
+        // Use saved AI summary
+        summaryDownloader.setSummaryData(session.ai_summary);
+        await summaryDownloader.downloadAsPDF(`session_${session.id}`);
+      } else {
+        // Fallback: Generate summary for old sessions without saved summaries
+        setIsGenerating(true);
+        const sessionData: SessionData = {
+          pain_point: session.pain_point,
+          causes: [session.issue_tree.primary_cause, ...session.issue_tree.sub_causes],
+          assumptions: session.assumptions,
+          perpetuations: session.perpetuations,
+          solutions: session.solutions,
+          fears: session.fears,
+          action_plan: session.action_plan,
+        };
+        
+        const summary = await summaryDownloader.generateSummary(`session_${session.id}`, sessionData);
+        setIsGenerating(false);
+        
+        if (summary) {
+          await summaryDownloader.downloadAsPDF(`session_${session.id}`);
+        }
       }
-    } else {
-      await summaryDownloader.downloadAsPDF(`session_${session._id}`);
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      setIsGenerating(false);
     }
   };
 
@@ -72,31 +75,34 @@ const SessionCard: React.FC<SessionProps> = ({ session, onViewSummary, onDelete,
     e.preventDefault();
     e.stopPropagation();
     
-    if (session.ai_summary && !summaryDownloader.summaryData) {
-      // Use saved AI summary
-      summaryDownloader.setSummaryData(session.ai_summary);
-      await summaryDownloader.saveAsImage(`session_${session._id}`);
-    } else if (!summaryDownloader.summaryData) {
-      // Fallback: Generate summary for old sessions without saved summaries
-      setIsGenerating(true);
-      const sessionData: SessionData = {
-        pain_point: session.pain_point,
-        causes: [session.issue_tree.primary_cause, ...session.issue_tree.sub_causes],
-        assumptions: session.assumptions,
-        perpetuations: session.perpetuations,
-        solutions: session.solutions,
-        fears: session.fears,
-        action_plan: session.action_plan,
-      };
-      
-      const summary = await summaryDownloader.generateSummary(`session_${session._id}`, sessionData);
-      setIsGenerating(false);
-      
-      if (summary) {
-        await summaryDownloader.saveAsImage(`session_${session._id}`);
+    try {
+      if (session.ai_summary) {
+        // Use saved AI summary
+        summaryDownloader.setSummaryData(session.ai_summary);
+        await summaryDownloader.saveAsImage(`session_${session.id}`);
+      } else {
+        // Fallback: Generate summary for old sessions without saved summaries
+        setIsGenerating(true);
+        const sessionData: SessionData = {
+          pain_point: session.pain_point,
+          causes: [session.issue_tree.primary_cause, ...session.issue_tree.sub_causes],
+          assumptions: session.assumptions,
+          perpetuations: session.perpetuations,
+          solutions: session.solutions,
+          fears: session.fears,
+          action_plan: session.action_plan,
+        };
+        
+        const summary = await summaryDownloader.generateSummary(`session_${session.id}`, sessionData);
+        setIsGenerating(false);
+        
+        if (summary) {
+          await summaryDownloader.saveAsImage(`session_${session.id}`);
+        }
       }
-    } else {
-      await summaryDownloader.saveAsImage(`session_${session._id}`);
+    } catch (error) {
+      console.error('Error saving as image:', error);
+      setIsGenerating(false);
     }
   };
 

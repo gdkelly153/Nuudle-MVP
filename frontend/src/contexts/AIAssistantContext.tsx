@@ -130,20 +130,8 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
       return;
     }
 
-    // Check if we have a cached response for this stage with substantively the same user input
-    const existingResponse = responses[stage];
-    if (existingResponse) {
-      // Filter out empty values from both current and cached context for meaningful comparison
-      const currentFiltered = filterEmptyValues(context);
-      const cachedFiltered = filterEmptyValues(existingResponse.userInput);
-      
-      if (JSON.stringify(currentFiltered) === JSON.stringify(cachedFiltered)) {
-        // Same meaningful content, just show the existing response
-        setActiveStage(stage);
-        setError(null);
-        return;
-      }
-    }
+    // Always make a fresh API call to ensure users get the latest AI behavior
+    // This ensures that backend prompt improvements are immediately visible
 
     setLoadingStage(stage);
     setLastAttemptedStage(stage);

@@ -25,12 +25,167 @@ CRITICAL RULE: When you reference any information provided by the user from a pl
 
 You should format your responses using Markdown. Use paragraphs for separation and lists (numbered or bulleted) where appropriate. For bulleted lists, always use the standard markdown syntax with "- " (dash followed by space) at the beginning of each bullet point. Add extra line breaks after each bullet point to improve readability."""
 
+def is_problem_good_enough(text: str) -> bool:
+    """
+    Tier 1 validation: Context-Pair Analysis for "Begin" button.
+    Returns False if the problem statement is too simplistic to proceed.
+    Requires both a problem keyword (core issue) AND a context keyword (descriptive detail).
+    """
+    trimmed_text = text.strip().lower()
+    
+    # Problem keywords - identify core issues/goals
+    problem_keywords = [
+        # Health & wellness
+        'sleep', 'exercise', 'eat', 'eating', 'diet', 'weight', 'health', 'fitness', 'stress',
+        'anxiety', 'depression', 'tired', 'energy', 'pain', 'sick', 'illness',
+        # Work & productivity
+        'work', 'job', 'career', 'productivity', 'procrastinate', 'focus', 'concentrate',
+        'deadline', 'meeting', 'boss', 'colleague', 'project', 'task', 'organize',
+        # Relationships & social
+        'relationship', 'partner', 'spouse', 'friend', 'family', 'parent', 'child',
+        'communication', 'argue', 'conflict', 'lonely', 'social', 'dating',
+        # Personal development
+        'habit', 'routine', 'goal', 'motivation', 'confidence', 'self-esteem', 'learn',
+        'skill', 'improve', 'change', 'grow', 'develop', 'practice',
+        # Financial
+        'money', 'budget', 'save', 'spend', 'debt', 'financial', 'income', 'expense',
+        # Time & organization
+        'time', 'schedule', 'busy', 'overwhelmed', 'balance', 'priority', 'manage'
+    ]
+    
+    # Context keywords - provide descriptive detail about the problem
+    context_keywords = [
+        # Descriptive circumstances
+        'when', 'where', 'during', 'while', 'after', 'before', 'at work', 'at home',
+        'in the morning', 'at night', 'daily', 'weekly', 'every time', 'always', 'never',
+        'often', 'sometimes', 'usually', 'frequently', 'rarely',
+        # Emotional/physical states
+        'feel', 'feeling', 'struggle', 'hard', 'difficult', 'easy', 'challenging',
+        'frustrated', 'overwhelmed', 'anxious', 'worried', 'stressed', 'tired', 'exhausted',
+        'motivated', 'unmotivated', 'confident', 'insecure',
+        # Specific details & constraints
+        'can\'t', 'cannot', 'don\'t', 'won\'t', 'unable', 'try', 'trying', 'attempt',
+        'fail', 'failing', 'succeed', 'successful', 'unsuccessful', 'stuck', 'blocked',
+        # Causal/explanatory
+        'because', 'since', 'due to', 'caused by', 'leads to', 'results in',
+        'so that', 'in order to', 'to achieve', 'to help', 'to improve',
+        # Quantitative/specific
+        'too much', 'too little', 'not enough', 'more than', 'less than', 'about',
+        'around', 'approximately', 'exactly', 'specifically', 'particularly'
+    ]
+    
+    # Check for presence of both problem and context keywords
+    has_problem_keyword = any(keyword in trimmed_text for keyword in problem_keywords)
+    has_context_keyword = any(keyword in trimmed_text for keyword in context_keywords)
+    
+    # Also check for question words as they often indicate context
+    question_words = ['who', 'what', 'where', 'when', 'why', 'how']
+    has_question_words = any(word in trimmed_text for word in question_words)
+    
+    # Context-Pair Analysis criteria:
+    # 1. Very short (less than 5 words) = too simplistic
+    # 2. Must have both a problem keyword AND (context keyword OR question words)
+    word_count = len(trimmed_text.split())
+    
+    if word_count < 5:
+        return False
+    
+    return has_problem_keyword and (has_context_keyword or has_question_words)
+
+def is_problem_well_articulated(text: str) -> bool:
+    """
+    Tier 2 validation: Check if problem statement is well-articulated for "Help Me Nuudle" button.
+    Returns True if the problem statement has both general context AND deeper contextual details.
+    Higher threshold - looks for motivation, obstacles, and comprehensive context.
+    """
+    trimmed_text = text.strip().lower()
+    
+    # General context keywords (same as Tier 1)
+    general_keywords = [
+        'what', 'which', 'how', 'where', 'location', 'place', 'at work', 'at home', 'in',
+        'when', 'time', 'during', 'while', 'after', 'before', 'daily', 'weekly', 'monthly',
+        'want', 'need', 'try', 'goal', 'aim', 'feel', 'feeling', 'struggle', 'hard', 'difficult',
+        'can\'t', 'cannot', 'don\'t', 'not', 'every time', 'always', 'never', 'often', 'sometimes',
+        'specifically', 'particularly', 'especially', 'regarding', 'concerning', 'about'
+    ]
+    
+    # Deeper contextual keywords (motivation, obstacles, why)
+    deeper_keywords = [
+        # Motivational indicators
+        'because', 'since', 'due to', 'so that', 'in order to', 'to achieve', 'for the purpose',
+        'to ensure', 'to improve', 'to reduce', 'to increase', 'to help', 'to make',
+        'motivated', 'motivation', 'reason', 'reasons', 'why', 'purpose', 'goal', 'goals',
+        # Obstacle/challenge indicators
+        'obstacle', 'obstacles', 'challenge', 'challenges', 'problem', 'problems', 'issue', 'issues',
+        'difficulty', 'difficulties', 'barrier', 'barriers', 'struggle', 'struggles', 'hard', 'difficult',
+        'prevent', 'prevents', 'stop', 'stops', 'block', 'blocks', 'interfere', 'interferes',
+        'past', 'before', 'previously', 'tried', 'attempt', 'attempts', 'failed', 'unsuccessful'
+    ]
+    
+    # Count keywords in each category
+    general_count = sum(1 for keyword in general_keywords if keyword in trimmed_text)
+    deeper_count = sum(1 for keyword in deeper_keywords if keyword in trimmed_text)
+    
+    # Check for question words
+    question_words = ['who', 'what', 'where', 'when', 'why', 'how']
+    has_question_words = any(word in trimmed_text for word in question_words)
+    
+    # Well-articulated criteria:
+    # 1. Must have reasonable length (at least 10 words)
+    # 2. Must have general context (at least 2 general keywords OR question words)
+    # 3. Must have deeper context (at least 1 deeper keyword)
+    word_count = len(trimmed_text.split())
+    
+    has_general_context = general_count >= 2 or has_question_words
+    has_deeper_context = deeper_count >= 1
+    
+    return word_count >= 10 and has_general_context and has_deeper_context
+
+def is_problem_simplistic(text: str) -> bool:
+    """
+    Legacy function maintained for backward compatibility.
+    Now uses the Tier 1 validation (good enough for Begin button).
+    """
+    return not is_problem_good_enough(text)
+
 PROMPTS = {
     "problem_articulation_direct": "Context: You are articulating a problem described in '{{userInput}}'. Your task is ONLY to help you describe your situation more completely. Do NOT suggest any causal factors or root causes. Ask 2-3 open-ended, clarifying questions to help you provide more context about the problem. Focus on the 'what', 'where', 'when', and 'who', not the 'why'. End your response by explaining that a clear problem description is the best starting point for this process. If these questions spark new details, consider updating your description to better frame the situation.",
     
-    "problem_articulation_intervention": "Context: You are articulating a problem described in '{{userInput}}'. Your task is ONLY to help you describe your situation more completely. Do NOT suggest any causal factors or root causes. Start your response with 'Before we begin...' then ask 2-3 open-ended, clarifying questions to help you provide more context about the problem. Focus on the 'what', 'where', 'when', and 'who', not the 'why'. End your response by explaining that a clear problem description is the best starting point for this process. If these questions spark new details, consider updating your description to better frame the situation.",
+    "problem_articulation_intervention": {
+        "intros": [
+            "Good start. Let's clarify the problem you're experiencing with a little more detail.",
+            "Let's add a bit more context to see the full picture.",
+            "A few more details can help uncover important clues.",
+            "Let's bring the problem into sharper focus.",
+            "Try answering these questions to see what new details emerge."
+        ],
+        "conclusions": [
+            "Use the insights from these questions to update your problem description.",
+            "With these new details in mind, please revise your problem statement to continue.",
+            "Please update your problem description with any new context you've uncovered.",
+            "Take a moment to integrate these details into your problem statement.",
+            "Please expand on your problem description using these new insights to proceed."
+        ],
+        "body": "Your goal is to generate 2-3 simple, open-ended questions that help the user provide more specific, descriptive context about their situation. Your questions must be assumption-free and work whether the user is engaging in the activity frequently, infrequently, or not at all. Focus on understanding the user's current reality and their motivations.\n\nGenerate thoughtful questions that feel contextually relevant to what the user has shared in '{{userInput}}'. Avoid formulaic or repetitive questions. Present your questions as a bulleted list using '- ' for each point."
+    },
     
-    "problem_articulation_context_aware": "Context: You are articulating a problem described in '{{userInput}}'. Your task is ONLY to help you describe your situation more completely. Do NOT suggest any causal factors or root causes. CRITICAL: Do NOT summarize, repeat, or restate any information you have already provided. Do NOT include sections like 'What the problem is' or 'Where and when it occurs' - this adds no value. Instead, start directly with 'Let's explore a few questions to help contextualize the situation more completely:' Then ask 2-3 thoughtful, open-ended questions that focus ONLY on information that is genuinely missing or unclear from your description. Do NOT ask for information you have already provided. If you have provided sufficient context about the basic facts, ask deeper questions that help you reflect on nuances, patterns, or aspects you might not have considered. End your response by explaining that a clear problem description is the best starting point for this process. If these questions spark new details, consider updating your description to better frame the situation.",
+    "problem_articulation_context_aware": {
+        "intros": [
+            "That's a great starting point. Digging a little deeper into the details helps ensure you're aiming at the right target.",
+            "Think of this first step like drawing a map. The more detail you add now, the easier it will be to navigate to a solution later.",
+            "Sometimes, the problem you first see is just a symptom of something deeper. Adding more context helps ensure you're looking at the root of the issue.",
+            "Zooming in on the problem by describing it in more detail can often uncover clues that point to the best path forward.",
+            "The more clearly you can see the problem, the clearer the solution becomes. Adding a few more details can bring everything into focus."
+        ],
+        "conclusions": [
+            "Use the insights from these questions to update your problem description.",
+            "With these new details in mind, please revise your problem statement to continue.",
+            "Please update your problem description with any new context you've uncovered.",
+            "Take a moment to integrate these details into your problem statement.",
+            "Please expand on your problem description using these new insights to proceed."
+        ],
+        "body": "{{dynamic_intro}}\n\nYour main goal is to help the user expand on their problem statement by providing more specific, descriptive context. To do this, you will generate 2-3 tailored, open-ended questions based on the following logic:\n\na) First, identify the core problem or behavior. The user might state their goal (e.g., \"I want to drink less\"). Your task is to ask questions about the underlying behavior (the drinking itself), not just the desire for change.\n\nb) Then, analyze the user's statement in '{{userInput}}' for basic context. Have they already clearly mentioned the 'what', 'where', 'when', or 'who' of the core problem?\n\nc) Finally, generate your questions based on your analysis:\n   - If basic context is MISSING: Ask questions about the core problem to fill in those specific gaps (e.g., \"When does the drinking typically happen?\").\n   - If basic context is ALREADY PROVIDED: Do NOT ask for it again. Instead, ask deeper, more descriptive questions that encourage the user to describe what the problem actually looks and feels like. Prompt them to describe a typical scenario or the specific thoughts and feelings involved. For example, if the user says they \"struggle to fall asleep in bed,\" a good follow-up would be, \"Can you walk me through what a typical night of 'bad sleep' looks like for you from start to finish?\"\n\nDo NOT ask 'why' and do NOT suggest any causal factors.\n\n{{dynamic_conclusion}}\n\nCRITICAL: Do NOT add any other text, formatting, or conversational filler. Your entire response must be only the chosen intro, the questions, and the chosen conclusion."
+    },
     
     "root_cause": {
         "intros": [
@@ -456,17 +611,67 @@ async def get_ai_response(user_id: str, session_id: str, stage: str, user_input:
         # Handle legacy string prompts
         prompt = prompt_config
     elif isinstance(prompt_config, dict) and 'body' in prompt_config:
-        # Handle prompt structure based on body type
-        prompt_body = ''
-        
-        if isinstance(prompt_config['body'], str):
-            # Unified prompt format - use body directly
-            prompt_body = prompt_config['body']
-        elif isinstance(prompt_config['body'], dict) and 'headers' in prompt_config:
-            # Legacy structured format with headers and sectioned body
-            headers = prompt_config['headers']
-            body = prompt_config['body']
-            prompt_body = f"""[INSTRUCTIONS_START]
+        # Special handling for problem_articulation_intervention
+        if actual_stage == 'problem_articulation_intervention':
+            # First, check if the input is well-articulated using Tier 2 validation
+            if is_problem_well_articulated(processed_user_input):
+                # Input is well-articulated, return validation message immediately
+                validation_message = "This is a great, well-articulated problem description. You've provided excellent context to get started. Click 'Begin' to move on to the next step."
+                
+                # Log the interaction (no AI call was made, so we'll use minimal token counts)
+                interaction_id = await log_ai_interaction({
+                    "sessionId": session_id,
+                    "userId": user_id,
+                    "stage": stage,
+                    "userInput": user_input,
+                    "sessionContext": session_context,
+                    "aiResponse": validation_message,
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "costUsd": 0.0
+                })
+                
+                return {
+                    "success": True,
+                    "interactionId": interaction_id,
+                    "response": validation_message,
+                    "cost": 0.0,
+                    "tokensUsed": 0,
+                    "usage": await check_rate_limits(user_id, session_id)
+                }
+            
+            # Input needs more context, proceed with AI question generation
+            instructions = prompt_config['body']
+            
+            # Replace context placeholders in instructions
+            instructions = instructions.replace('{{userInput}}', processed_user_input)
+            for key, value in session_context.items():
+                formatted_value = format_context_value(key, value)
+                instructions = instructions.replace('{{' + key + '}}', formatted_value)
+            
+            # Create clean prompt asking only for questions
+            prompt = f"""[INSTRUCTIONS_START]
+You are an AI assistant named Nuudle. These are your specific instructions for this response:
+
+{instructions}
+
+CRITICAL: Your response must contain ONLY the 2-3 questions you generate, formatted as a markdown bulleted list using '- '. Do not add any other text, headers, intros, or conclusions.
+[INSTRUCTIONS_END]
+
+Your response (questions only) begins now:"""
+            
+        else:
+            # Handle prompt structure based on body type for other prompts
+            prompt_body = ''
+            
+            if isinstance(prompt_config['body'], str):
+                # Unified prompt format - use body directly
+                prompt_body = prompt_config['body']
+            elif isinstance(prompt_config['body'], dict) and 'headers' in prompt_config:
+                # Legacy structured format with headers and sectioned body
+                headers = prompt_config['headers']
+                body = prompt_config['body']
+                prompt_body = f"""[INSTRUCTIONS_START]
 You are an AI assistant named Nuudle. These are your specific instructions for this response:
 
 SECTION 1 - Header: {headers.get('analysis', '')}
@@ -482,17 +687,22 @@ CRITICAL: Do not include any of the above instruction text in your response. You
 [INSTRUCTIONS_END]
 
 Your conversational response begins now:"""
-        else:
-            # Fallback for any other body structure
-            prompt_body = f"Follow these instructions:\n\n{prompt_config['body']}"
+            else:
+                # Fallback for any other body structure
+                prompt_body = f"Follow these instructions:\n\n{prompt_config['body']}"
 
-        # Start with the prompt body
-        prompt = prompt_body
-        
-        # Handle dynamic intro placeholder if it exists
-        if 'intros' in prompt_config and prompt_config['intros'] and '{{dynamic_intro}}' in prompt:
-            random_intro = random.choice(prompt_config['intros'])
-            prompt = prompt.replace('{{dynamic_intro}}', random_intro)
+            # Start with the prompt body
+            prompt = prompt_body
+            
+            # Handle dynamic intro placeholder if it exists
+            if 'intros' in prompt_config and prompt_config['intros'] and '{{dynamic_intro}}' in prompt:
+                random_intro = random.choice(prompt_config['intros'])
+                prompt = prompt.replace('{{dynamic_intro}}', random_intro)
+            
+            # Handle dynamic conclusion placeholder if it exists
+            if 'conclusions' in prompt_config and prompt_config['conclusions'] and '{{dynamic_conclusion}}' in prompt:
+                random_conclusion = random.choice(prompt_config['conclusions'])
+                prompt = prompt.replace('{{dynamic_conclusion}}', random_conclusion)
     
     # Replace placeholders in prompt
     prompt = prompt.replace('{{userInput}}', processed_user_input)
@@ -502,6 +712,14 @@ Your conversational response begins now:"""
 
     try:
         ai_result = await get_claude_response(prompt)
+        
+        # Special post-processing for problem_articulation_intervention
+        final_response = ai_result["responseText"]
+        if actual_stage == 'problem_articulation_intervention':
+            # Wrap the AI's questions with randomly selected intro and conclusion
+            random_intro = random.choice(prompt_config['intros'])
+            random_conclusion = random.choice(prompt_config['conclusions'])
+            final_response = f"{random_intro}\n\n{ai_result['responseText']}\n\n{random_conclusion}"
         
         # Pricing for Claude 3 Haiku ($ per 1M tokens)
         input_cost = (ai_result["inputTokens"] / 1000000) * 0.25
@@ -514,7 +732,7 @@ Your conversational response begins now:"""
             "stage": stage,  # Keep original stage for logging consistency
             "userInput": user_input,
             "sessionContext": session_context,
-            "aiResponse": ai_result["responseText"],
+            "aiResponse": final_response,
             "inputTokens": ai_result["inputTokens"],
             "outputTokens": ai_result["outputTokens"],
             "costUsd": cost_usd
@@ -523,7 +741,7 @@ Your conversational response begins now:"""
         return {
             "success": True,
             "interactionId": interaction_id,
-            "response": ai_result["responseText"],
+            "response": final_response,
             "cost": cost_usd,
             "tokensUsed": ai_result["inputTokens"] + ai_result["outputTokens"],
             "usage": await check_rate_limits(user_id, session_id)

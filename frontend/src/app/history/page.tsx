@@ -6,7 +6,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import { useSummaryDownloader, type SummaryData, type SessionData } from "@/hooks/useSummaryDownloader";
 
 interface Session {
-  _id: string;
+  id: string;
   created_at: string;
   pain_point: string;
   issue_tree: {
@@ -124,7 +124,7 @@ const HistoryPage = () => {
         action_plan: session.action_plan,
       };
       
-      const summary = await summaryDownloader.generateSummary(`session_${session._id}`, sessionData);
+      const summary = await summaryDownloader.generateSummary(`session_${session.id}`, sessionData);
       if (summary) {
         setShowSummaryModal(true);
       }
@@ -138,19 +138,19 @@ const HistoryPage = () => {
 
   const downloadAsPDF = async () => {
     if (selectedSession) {
-      await summaryDownloader.downloadAsPDF(`session_${selectedSession._id}`);
+      await summaryDownloader.downloadAsPDF(`session_${selectedSession.id}`);
     }
   };
 
   const shareOnSocial = async () => {
     if (selectedSession) {
-      await summaryDownloader.saveAsImage(`session_${selectedSession._id}`);
+      await summaryDownloader.saveAsImage(`session_${selectedSession.id}`);
     }
   };
 
   const handleDeleteSession = (session: Session) => {
     setSessionToDelete(session);
-    setDeletingSessionId(session._id);
+    setDeletingSessionId(session.id);
     setShowDeleteModal(true);
   };
 
@@ -159,14 +159,14 @@ const HistoryPage = () => {
     
     setIsDeleting(true);
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sessions/${sessionToDelete._id}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sessions/${sessionToDelete.id}`, {
         method: 'DELETE',
         credentials: 'include'
       });
       
       if (response.ok) {
         // Remove the session from the local state
-        setSessions(sessions.filter(session => session._id !== sessionToDelete._id));
+        setSessions(sessions.filter(session => session.id !== sessionToDelete.id));
         setShowDeleteModal(false);
         setSessionToDelete(null);
         setDeletingSessionId(null);
@@ -283,11 +283,11 @@ const HistoryPage = () => {
             ) : (
               filteredSessions.map((session) => (
                 <SessionCard
-                  key={session._id}
+                  key={session.id}
                   session={session}
                   onViewSummary={handleViewSummary}
                   onDelete={handleDeleteSession}
-                  isDeleting={deletingSessionId === session._id}
+                  isDeleting={deletingSessionId === session.id}
                 />
               ))
             )}

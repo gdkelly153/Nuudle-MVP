@@ -365,19 +365,28 @@ async def get_sessions(request: Request):
     
     sessions = []
     async for session_doc in cursor:
-        sessions.append(SessionRead(
-            id=str(session_doc["_id"]),
-            created_at=session_doc["created_at"].isoformat(),
-            pain_point=session_doc["pain_point"],
-            issue_tree=IssueTree(**session_doc["issue_tree"]),
-            assumptions=session_doc["assumptions"],
-            perpetuations=session_doc["perpetuations"],
-            solutions=session_doc["solutions"],
-            fears=[Fear(**fear) for fear in session_doc["fears"]],
-            action_plan=session_doc["action_plan"],
-            ai_summary=session_doc.get("ai_summary"),
-            summary_header=session_doc.get("summary_header")
-        ))
+        # Skip documents without a valid _id (defensive programming for migration issues)
+        if not session_doc.get("_id"):
+            print(f"Skipping session document without _id: {session_doc}")
+            continue
+            
+        try:
+            sessions.append(SessionRead(
+                id=str(session_doc["_id"]),
+                created_at=session_doc.get("created_at", datetime.utcnow()).isoformat(),
+                pain_point=session_doc.get("pain_point", "No pain point recorded"),
+                issue_tree=IssueTree(**session_doc.get("issue_tree", {"primary_cause": "", "sub_causes": []})),
+                assumptions=session_doc.get("assumptions", []),
+                perpetuations=session_doc.get("perpetuations", []),
+                solutions=session_doc.get("solutions", []),
+                fears=[Fear(**fear) for fear in session_doc.get("fears", [])],
+                action_plan=session_doc.get("action_plan", ""),
+                ai_summary=session_doc.get("ai_summary"),
+                summary_header=session_doc.get("summary_header")
+            ))
+        except Exception as e:
+            print(f"Skipping malformed session document {session_doc.get('_id')}: {e}")
+            continue
     
     return sessions
 
@@ -414,6 +423,29 @@ async def get_session(session_id: str, request: Request):
         ai_summary=session_doc.get("ai_summary"),
         summary_header=session_doc.get("summary_header")
     )
+
+@app.delete("/api/sessions/{session_id}")
+async def delete_session(session_id: str, request: Request):
+    """Delete a session"""
+    current_user = await get_current_user(request)
+    
+    db = get_database()
+    
+    try:
+        object_id = ObjectId(session_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+    
+    # If user is authenticated, ensure they can only delete their own sessions
+    if current_user:
+        result = await db.sessions.delete_one({"_id": object_id, "user_id": current_user.id})
+    else:
+        result = await db.sessions.delete_one({"_id": object_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    return {"success": True, "message": "Session deleted successfully"}
 
 # AI Endpoints
 @app.post("/api/ai/assist", response_model=AIAssistResponse)
