@@ -90,6 +90,15 @@ class AIAssistResponse(BaseModel):
     error: Optional[str] = None
     fallback: Optional[str] = None
 
+class AIValidateRequest(BaseModel):
+    problemStatement: str
+
+class AIValidateResponse(BaseModel):
+    success: bool
+    isValid: Optional[bool] = None
+    reason: Optional[str] = None
+    error: Optional[str] = None
+
 class AISummaryRequest(BaseModel):
     sessionId: str
     sessionData: Dict[str, Any]
@@ -549,3 +558,24 @@ async def get_ai_usage(session_id: str, current_request: Request):
     except Exception as e:
         print(f"Usage check error: {e}")
         raise HTTPException(status_code=500, detail="Failed to get usage data")
+
+@app.post("/api/ai/validate-problem", response_model=AIValidateResponse)
+async def validate_problem(request: AIValidateRequest):
+    """Validate if a problem statement is well-articulated using AI"""
+    try:
+        # Import the validate_problem_statement function from ai_service - hybrid import
+        try:
+            from backend.ai_service import validate_problem_statement
+        except ImportError:
+            from ai_service import validate_problem_statement
+        
+        result = await validate_problem_statement(request.problemStatement)
+        
+        return AIValidateResponse(**result)
+        
+    except Exception as e:
+        print(f"Problem validation error: {e}")
+        return AIValidateResponse(
+            success=False,
+            error="Failed to validate problem statement"
+        )

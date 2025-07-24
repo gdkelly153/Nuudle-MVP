@@ -25,94 +25,7 @@ CRITICAL RULE: When you reference any information provided by the user from a pl
 
 You should format your responses using Markdown. Use paragraphs for separation and lists (numbered or bulleted) where appropriate. For bulleted lists, always use the standard markdown syntax with "- " (dash followed by space) at the beginning of each bullet point. Add extra line breaks after each bullet point to improve readability."""
 
-def is_problem_good_enough(text: str) -> bool:
-    """
-    Tier 1 validation: Combined Threshold Validation for "Begin" button.
-    Returns False if the problem statement is too simplistic to proceed.
-    Uses word count and context keywords to determine if statement is well-articulated.
-    """
-    trimmed_text = text.strip().lower()
-    
-    # Context keywords - provide descriptive detail about the problem
-    context_keywords = [
-        # Descriptive circumstances
-        'when', 'where', 'during', 'while', 'after', 'before', 'at work', 'at home',
-        'in the morning', 'at night', 'daily', 'weekly', 'every time', 'always', 'never',
-        'often', 'sometimes', 'usually', 'frequently', 'rarely',
-        # Emotional/physical states
-        'feel', 'feeling', 'struggle', 'hard', 'difficult', 'easy', 'challenging',
-        'frustrated', 'overwhelmed', 'anxious', 'worried', 'stressed', 'tired', 'exhausted',
-        'motivated', 'unmotivated', 'confident', 'insecure',
-        # Specific details & constraints
-        'can\'t', 'cannot', 'don\'t', 'won\'t', 'unable', 'try', 'trying', 'attempt',
-        'fail', 'failing', 'succeed', 'successful', 'unsuccessful', 'stuck', 'blocked',
-        # Causal/explanatory
-        'because', 'since', 'due to', 'caused by', 'leads to', 'results in',
-        'so that', 'in order to', 'to achieve', 'to help', 'to improve',
-        # Quantitative/specific
-        'too much', 'too little', 'not enough', 'more than', 'less than', 'about',
-        'around', 'approximately', 'exactly', 'specifically', 'particularly'
-    ]
-    
-    # Combined Threshold Validation:
-    # A statement is valid if it has at least 8 words AND at least 2 contextual keywords
-    word_count = len(trimmed_text.split())
-    context_keyword_count = sum(1 for keyword in context_keywords if keyword in trimmed_text)
-    
-    # A statement is good enough if it's long enough AND has sufficient context
-    if word_count >= 8 and context_keyword_count >= 2:
-        return True
-    
-    return False
-
-def is_problem_well_articulated(text: str) -> bool:
-    """
-    Tier 2 validation: Check if problem statement is well-articulated for "Help Me Nuudle" button.
-    Returns True if the problem statement has both general context AND deeper contextual details.
-    Higher threshold - looks for motivation, obstacles, and comprehensive context.
-    """
-    trimmed_text = text.strip().lower()
-    
-    # General context keywords (same as Tier 1)
-    general_keywords = [
-        'what', 'which', 'how', 'where', 'location', 'place', 'at work', 'at home', 'in',
-        'when', 'time', 'during', 'while', 'after', 'before', 'daily', 'weekly', 'monthly',
-        'want', 'need', 'try', 'goal', 'aim', 'feel', 'feeling', 'struggle', 'hard', 'difficult',
-        'can\'t', 'cannot', 'don\'t', 'not', 'every time', 'always', 'never', 'often', 'sometimes',
-        'specifically', 'particularly', 'especially', 'regarding', 'concerning', 'about'
-    ]
-    
-    # Deeper contextual keywords (motivation, obstacles, why)
-    deeper_keywords = [
-        # Motivational indicators
-        'because', 'since', 'due to', 'so that', 'in order to', 'to achieve', 'for the purpose',
-        'to ensure', 'to improve', 'to reduce', 'to increase', 'to help', 'to make',
-        'motivated', 'motivation', 'reason', 'reasons', 'why', 'purpose', 'goal', 'goals',
-        # Obstacle/challenge indicators
-        'obstacle', 'obstacles', 'challenge', 'challenges', 'problem', 'problems', 'issue', 'issues',
-        'difficulty', 'difficulties', 'barrier', 'barriers', 'struggle', 'struggles', 'hard', 'difficult',
-        'prevent', 'prevents', 'stop', 'stops', 'block', 'blocks', 'interfere', 'interferes',
-        'past', 'before', 'previously', 'tried', 'attempt', 'attempts', 'failed', 'unsuccessful'
-    ]
-    
-    # Count keywords in each category
-    general_count = sum(1 for keyword in general_keywords if keyword in trimmed_text)
-    deeper_count = sum(1 for keyword in deeper_keywords if keyword in trimmed_text)
-    
-    # Check for question words
-    question_words = ['who', 'what', 'where', 'when', 'why', 'how']
-    has_question_words = any(word in trimmed_text for word in question_words)
-    
-    # Well-articulated criteria:
-    # 1. Must have reasonable length (at least 10 words)
-    # 2. Must have general context (at least 2 general keywords OR question words)
-    # 3. Must have deeper context (at least 1 deeper keyword)
-    word_count = len(trimmed_text.split())
-    
-    has_general_context = general_count >= 2 or has_question_words
-    has_deeper_context = deeper_count >= 1
-    
-    return word_count >= 10 and has_general_context and has_deeper_context
+# Old keyword-based validation functions removed - now using AI-powered validation
 
 def is_input_goal_oriented(text: str) -> bool:
     """
@@ -135,13 +48,6 @@ def is_input_goal_oriented(text: str) -> bool:
             return True
             
     return False
-
-def is_problem_simplistic(text: str) -> bool:
-    """
-    Legacy function maintained for backward compatibility.
-    Now uses the Tier 1 validation (good enough for Begin button).
-    """
-    return not is_problem_good_enough(text)
 
 PROMPTS = {
     "problem_articulation_direct": "Context: You are articulating a problem described in '{{userInput}}'. Your task is ONLY to help you describe your situation more completely. Do NOT suggest any causal factors or root causes. Ask 2-3 open-ended, clarifying questions to help you provide more context about the problem. Focus on the 'what', 'where', 'when', and 'who', not the 'why'. End your response by explaining that a clear problem description is the best starting point for this process. If these questions spark new details, consider updating your description to better frame the situation.",
@@ -646,35 +552,7 @@ async def get_ai_response(user_id: str, session_id: str, stage: str, user_input:
     elif isinstance(prompt_config, dict) and 'body' in prompt_config:
         # Special handling for problem_articulation_intervention and goal variants
         if actual_stage in ['problem_articulation_intervention', 'problem_articulation_intervention_goal', 'problem_articulation_context_aware_goal']:
-            # First, check if the input is well-articulated using Tier 2 validation
-            # Skip this check if force_guidance is True (user needs help regardless of validation)
-            if not force_guidance and is_problem_well_articulated(processed_user_input):
-                # Input is well-articulated, return validation message immediately
-                validation_message = "This is a great, well-articulated problem description. You've provided excellent context to get started. Click 'Begin' to move on to the next step."
-                
-                # Log the interaction (no AI call was made, so we'll use minimal token counts)
-                interaction_id = await log_ai_interaction({
-                    "sessionId": session_id,
-                    "userId": user_id,
-                    "stage": stage,
-                    "userInput": user_input,
-                    "sessionContext": session_context,
-                    "aiResponse": validation_message,
-                    "inputTokens": 0,
-                    "outputTokens": 0,
-                    "costUsd": 0.0
-                })
-                
-                return {
-                    "success": True,
-                    "interactionId": interaction_id,
-                    "response": validation_message,
-                    "cost": 0.0,
-                    "tokensUsed": 0,
-                    "usage": await check_rate_limits(user_id, session_id)
-                }
-            
-            # Input needs more context, proceed with AI question generation
+            # Proceed with AI question generation (old validation logic removed)
             instructions = prompt_config['body']
             
             # Replace context placeholders in instructions
@@ -879,4 +757,80 @@ async def get_ai_summary(user_id: str, session_id: str, session_data: Dict[str, 
             "error": error_message,
             "fallback": "Unable to generate AI summary at this time. You can still review your session data.",
             "usage": limits
+        }
+
+async def validate_problem_statement(problem_statement: str) -> Dict[str, Any]:
+    """
+    AI-powered validation of problem statements.
+    Returns a dictionary with validation results.
+    """
+    if not problem_statement or not problem_statement.strip():
+        return {
+            "success": True,
+            "isValid": False,
+            "reason": "Problem statement cannot be empty."
+        }
+    
+    # Create a specialized prompt for problem statement evaluation
+    validation_prompt = f"""You are a problem statement evaluator. Your task is to determine if the following problem statement contains enough substance to begin meaningful problem-solving work.
+
+EVALUATION CRITERIA:
+A problem statement is VALID if it contains at least TWO of these three elements:
+1. **Clear problem description**: What is the core issue or challenge?
+2. **Contextual details**: When, where, how, or under what circumstances does this occur?
+3. **Impact or consequences**: What are the effects or results of this problem?
+
+A problem statement is SIMPLISTIC only if it:
+- Is extremely vague with no identifiable problem (e.g., "I feel bad")
+- Contains no context, impact, or actionable information (e.g., "I need help")
+- Is purely a goal statement without describing any underlying problem (e.g., "I want to be successful")
+
+IMPORTANT: Lean towards approving statements that contain enough substance to work with, even if they are concise. A brief but clear problem description with some context or impact should be considered valid.
+
+Problem statement to evaluate: "{problem_statement.strip()}"
+
+Respond with a JSON object in this exact format:
+{{
+  "isValid": true/false,
+  "reason": "Brief explanation of your evaluation"
+}}
+
+Your response must be valid JSON only, no other text."""
+
+    try:
+        # Use the existing Claude API function
+        ai_result = await get_claude_response(validation_prompt)
+        
+        # Try to parse the JSON response
+        try:
+            import json
+            validation_result = json.loads(ai_result["responseText"])
+            
+            return {
+                "success": True,
+                "isValid": validation_result.get("isValid", False),
+                "reason": validation_result.get("reason", "Unable to determine validation status")
+            }
+            
+        except json.JSONDecodeError:
+            # If JSON parsing fails, fall back to a simple heuristic
+            response_text = ai_result["responseText"].lower()
+            is_valid = "true" in response_text or "valid" in response_text
+            
+            return {
+                "success": True,
+                "isValid": is_valid,
+                "reason": "AI validation completed" if is_valid else "Problem statement needs more detail"
+            }
+            
+    except Exception as e:
+        print(f"AI validation error: {e}")
+        # Fallback to basic length check if AI fails
+        word_count = len(problem_statement.strip().split())
+        is_valid = word_count >= 8
+        
+        return {
+            "success": True,
+            "isValid": is_valid,
+            "reason": "AI validation unavailable, using basic validation" if is_valid else "Problem statement appears too brief"
         }

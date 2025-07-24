@@ -27,7 +27,7 @@ interface AIAssistantContextType {
   responses: { [stage: string]: AIResponse | null };
   activeStage: string | null;
   error: string | null;
-  requestAssistance: (stage: string, userInput: string, context: any) => Promise<void>;
+  requestAssistance: (stage: string, userInput: string, context: any, forceGuidance?: boolean) => Promise<void>;
   dismissResponse: () => void;
   provideFeedback: (helpful: boolean) => Promise<void>;
   clearResponseForStage: (stage: string) => void;
@@ -118,7 +118,7 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
     return obj;
   };
 
-  const requestAssistance = async (stage: string, userInput: string, context: any) => {
+  const requestAssistance = async (stage: string, userInput: string, context: any, forceGuidance?: boolean) => {
     if (!sessionId) {
       return;
     }
@@ -148,7 +148,8 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
           sessionId,
           stage,
           userInput,
-          sessionContext: context
+          sessionContext: context,
+          forceGuidance: forceGuidance || false
         })
       });
 

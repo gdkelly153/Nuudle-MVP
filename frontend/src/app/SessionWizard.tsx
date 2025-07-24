@@ -48,6 +48,10 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [sessionSaved, setSessionSaved] = useState(false);
   
+  // New state for AI-powered validation
+  const [isValidatingProblem, setIsValidatingProblem] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  
   // New state for summary modal
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   
@@ -372,80 +376,67 @@ useEffect(() => {
     return false;
   };
 
-  // Helper function to determine if problem statement is good enough for "Begin" button
-  const isProblemSimplistic = (text: string): boolean => {
-    const trimmedText = text.trim().toLowerCase();
-    
-    // Problem keywords - identify core issues/goals
-    const problemKeywords = [
-      // Health & wellness
-      'sleep', 'exercise', 'eat', 'eating', 'diet', 'weight', 'health', 'fitness', 'stress',
-      'anxiety', 'depression', 'tired', 'energy', 'pain', 'sick', 'illness',
-      // Work & productivity
-      'work', 'job', 'career', 'productivity', 'procrastinate', 'focus', 'concentrate',
-      'deadline', 'meeting', 'boss', 'colleague', 'project', 'task', 'organize',
-      // Relationships & social
-      'relationship', 'partner', 'spouse', 'friend', 'family', 'parent', 'child',
-      'communication', 'argue', 'conflict', 'lonely', 'social', 'dating',
-      // Personal development
-      'habit', 'routine', 'goal', 'motivation', 'confidence', 'self-esteem', 'learn',
-      'skill', 'improve', 'change', 'grow', 'develop', 'practice',
-      // Financial
-      'money', 'budget', 'save', 'spend', 'debt', 'financial', 'income', 'expense',
-      // Time & organization
-      'time', 'schedule', 'busy', 'overwhelmed', 'balance', 'priority', 'manage'
-    ];
-    
-    // Context keywords - provide descriptive detail about the problem
-    const contextKeywords = [
-      // Descriptive circumstances
-      'when', 'where', 'during', 'while', 'after', 'before', 'at work', 'at home',
-      'in the morning', 'at night', 'daily', 'weekly', 'every time', 'always', 'never',
-      'often', 'sometimes', 'usually', 'frequently', 'rarely',
-      // Emotional/physical states
-      'feel', 'feeling', 'struggle', 'hard', 'difficult', 'easy', 'challenging',
-      'frustrated', 'overwhelmed', 'anxious', 'worried', 'stressed', 'tired', 'exhausted',
-      'motivated', 'unmotivated', 'confident', 'insecure',
-      // Specific details & constraints
-      'can\'t', 'cannot', 'don\'t', 'won\'t', 'unable', 'try', 'trying', 'attempt',
-      'fail', 'failing', 'succeed', 'successful', 'unsuccessful', 'stuck', 'blocked',
-      // Causal/explanatory
-      'because', 'since', 'due to', 'caused by', 'leads to', 'results in',
-      'so that', 'in order to', 'to achieve', 'to help', 'to improve',
-      // Quantitative/specific
-      'too much', 'too little', 'not enough', 'more than', 'less than', 'about',
-      'around', 'approximately', 'exactly', 'specifically', 'particularly'
-    ];
-    
-    // Check for presence of both problem and context keywords
-    const hasProblemKeyword = problemKeywords.some(keyword => trimmedText.includes(keyword));
-    const hasContextKeyword = contextKeywords.some(keyword => trimmedText.includes(keyword));
-    
-    // Also check for question words as they often indicate context
-    const questionWords = ['who', 'what', 'where', 'when', 'why', 'how'];
-    const hasQuestionWords = questionWords.some(word => trimmedText.includes(word));
-    
-    // Context-Pair Analysis criteria:
-    // 1. Very short (less than 5 words) = too simplistic
-    // 2. Must have both a problem keyword AND (context keyword OR question words)
-    const wordCount = trimmedText.split(/\s+/).length;
-    
-    if (wordCount < 5) {
-      return true; // too simplistic
+  // AI-powered validation function
+  const validateProblemStatement = async (text: string): Promise<{ isValid: boolean; reason?: string }> => {
+    if (!text.trim()) {
+      return { isValid: false, reason: "Problem statement cannot be empty." };
     }
-    
-    return !(hasProblemKeyword && (hasContextKeyword || hasQuestionWords));
+
+    setIsValidatingProblem(true);
+    setValidationError(null);
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ai/validate-problem`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          problemStatement: text.trim()
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Validation failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || "Validation failed");
+      }
+
+      return {
+        isValid: result.isValid,
+        reason: result.reason
+      };
+
+    } catch (error) {
+      console.error("Problem validation error:", error);
+      setValidationError(error instanceof Error ? error.message : "Validation failed");
+      
+      // Fallback to basic length check if AI validation fails
+      const wordCount = text.trim().split(/\s+/).length;
+      return {
+        isValid: wordCount >= 8,
+        reason: wordCount >= 8 ? "Basic validation passed" : "Problem statement appears too brief"
+      };
+    } finally {
+      setIsValidatingProblem(false);
+    }
   };
 
-  const startSession = () => {
+  const startSession = async () => {
     if (painPoint.trim()) {
-      // Check if the problem statement is too simplistic
-      if (isProblemSimplistic(painPoint)) {
+      // Use AI-powered validation
+      const validation = await validateProblemStatement(painPoint);
+      
+      if (!validation.isValid) {
         // Show guidance hint instead of automatically triggering AI
         setShowGuidanceHint(true);
         setGuidanceHintShownCount(prev => prev + 1);
       } else {
-        // Problem statement has sufficient context, proceed to step 1
+        // Problem statement is valid, proceed to step 1
         setShowGuidanceHint(false);
         setGuidanceHintShownCount(0); // Reset counter when user successfully proceeds
         setStep(1);
@@ -1044,7 +1035,8 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                 const stage = isInputGoalOriented(painPoint)
                   ? "problem_articulation_intervention_goal"
                   : "problem_articulation_intervention";
-                ai.requestAssistance(stage, painPoint, { painPoint });
+                // Pass force_guidance flag when guidance hint was shown (problem was flagged as simplistic)
+                ai.requestAssistance(stage, painPoint, { painPoint }, showGuidanceHint);
               }}
               isLoading={ai.loadingStage === 'problem_articulation_direct' || ai.loadingStage === 'problem_articulation_intervention' || ai.loadingStage === 'problem_articulation_intervention_goal' || ai.loadingStage === 'problem_articulation_context_aware'}
               disabled={!painPoint.trim() || !ai.canUseAI('problem_articulation_direct')}
@@ -1052,13 +1044,29 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
               buttonStep={0}
               isHighlighted={showGuidanceHint}
             />
-            <Tooltip text="Attempt the prompt to proceed." isDisabled={step === 0 && !painPoint.trim()}>
-              <button type="button" onClick={startSession} disabled={step !== 0 || !painPoint.trim()} className="landing-button">
-                Begin
+            <Tooltip text="Attempt the prompt to proceed." isDisabled={step === 0 && (!painPoint.trim() || isValidatingProblem)}>
+              <button
+                type="button"
+                onClick={startSession}
+                disabled={step !== 0 || !painPoint.trim() || isValidatingProblem}
+                className="landing-button"
+              >
+                {isValidatingProblem ? "Validating..." : "Begin"}
               </button>
             </Tooltip>
           </div>
           {ai.error && <AIErrorCard error={ai.error} onDismiss={ai.dismissResponse} />}
+          {validationError && (
+            <div className="error-container" style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#fee', border: '1px solid #fcc', borderRadius: '4px' }}>
+              <p style={{ color: '#c00', margin: 0 }}>Validation Error: {validationError}</p>
+              <button
+                onClick={() => setValidationError(null)}
+                style={{ marginTop: '0.5rem', padding: '0.25rem 0.5rem', backgroundColor: 'transparent', border: '1px solid #c00', color: '#c00', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
           {ai.getCurrentResponse() && step === 0 && (
             <AIResponseCard
               response={ai.getCurrentResponse()!}
