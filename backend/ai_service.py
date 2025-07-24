@@ -27,31 +27,11 @@ You should format your responses using Markdown. Use paragraphs for separation a
 
 def is_problem_good_enough(text: str) -> bool:
     """
-    Tier 1 validation: Context-Pair Analysis for "Begin" button.
+    Tier 1 validation: Combined Threshold Validation for "Begin" button.
     Returns False if the problem statement is too simplistic to proceed.
-    Requires both a problem keyword (core issue) AND a context keyword (descriptive detail).
+    Uses word count and context keywords to determine if statement is well-articulated.
     """
     trimmed_text = text.strip().lower()
-    
-    # Problem keywords - identify core issues/goals
-    problem_keywords = [
-        # Health & wellness
-        'sleep', 'exercise', 'eat', 'eating', 'diet', 'weight', 'health', 'fitness', 'stress',
-        'anxiety', 'depression', 'tired', 'energy', 'pain', 'sick', 'illness',
-        # Work & productivity
-        'work', 'job', 'career', 'productivity', 'procrastinate', 'focus', 'concentrate',
-        'deadline', 'meeting', 'boss', 'colleague', 'project', 'task', 'organize',
-        # Relationships & social
-        'relationship', 'partner', 'spouse', 'friend', 'family', 'parent', 'child',
-        'communication', 'argue', 'conflict', 'lonely', 'social', 'dating',
-        # Personal development
-        'habit', 'routine', 'goal', 'motivation', 'confidence', 'self-esteem', 'learn',
-        'skill', 'improve', 'change', 'grow', 'develop', 'practice',
-        # Financial
-        'money', 'budget', 'save', 'spend', 'debt', 'financial', 'income', 'expense',
-        # Time & organization
-        'time', 'schedule', 'busy', 'overwhelmed', 'balance', 'priority', 'manage'
-    ]
     
     # Context keywords - provide descriptive detail about the problem
     context_keywords = [
@@ -74,23 +54,16 @@ def is_problem_good_enough(text: str) -> bool:
         'around', 'approximately', 'exactly', 'specifically', 'particularly'
     ]
     
-    # Check for presence of both problem and context keywords
-    has_problem_keyword = any(keyword in trimmed_text for keyword in problem_keywords)
-    has_context_keyword = any(keyword in trimmed_text for keyword in context_keywords)
-    
-    # Also check for question words as they often indicate context
-    question_words = ['who', 'what', 'where', 'when', 'why', 'how']
-    has_question_words = any(word in trimmed_text for word in question_words)
-    
-    # Context-Pair Analysis criteria:
-    # 1. Very short (less than 5 words) = too simplistic
-    # 2. Must have both a problem keyword AND (context keyword OR question words)
+    # Combined Threshold Validation:
+    # A statement is valid if it has at least 8 words AND at least 2 contextual keywords
     word_count = len(trimmed_text.split())
+    context_keyword_count = sum(1 for keyword in context_keywords if keyword in trimmed_text)
     
-    if word_count < 5:
-        return False
+    # A statement is good enough if it's long enough AND has sufficient context
+    if word_count >= 8 and context_keyword_count >= 2:
+        return True
     
-    return has_problem_keyword and (has_context_keyword or has_question_words)
+    return False
 
 def is_problem_well_articulated(text: str) -> bool:
     """
@@ -638,7 +611,7 @@ async def log_ai_interaction(interaction_data: Dict[str, Any]) -> str:
     
     return str(result.inserted_id)
 
-async def get_ai_response(user_id: str, session_id: str, stage: str, user_input: str, session_context: Dict[str, Any]) -> Dict[str, Any]:
+async def get_ai_response(user_id: str, session_id: str, stage: str, user_input: str, session_context: Dict[str, Any], force_guidance: bool = False) -> Dict[str, Any]:
     """Get AI response for a given stage and context"""
     
     # Check rate limits for this specific stage
@@ -674,7 +647,8 @@ async def get_ai_response(user_id: str, session_id: str, stage: str, user_input:
         # Special handling for problem_articulation_intervention and goal variants
         if actual_stage in ['problem_articulation_intervention', 'problem_articulation_intervention_goal', 'problem_articulation_context_aware_goal']:
             # First, check if the input is well-articulated using Tier 2 validation
-            if is_problem_well_articulated(processed_user_input):
+            # Skip this check if force_guidance is True (user needs help regardless of validation)
+            if not force_guidance and is_problem_well_articulated(processed_user_input):
                 # Input is well-articulated, return validation message immediately
                 validation_message = "This is a great, well-articulated problem description. You've provided excellent context to get started. Click 'Begin' to move on to the next step."
                 

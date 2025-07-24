@@ -78,6 +78,7 @@ class AIAssistRequest(BaseModel):
     stage: str
     userInput: str
     sessionContext: Dict[str, Any]
+    forceGuidance: Optional[bool] = False
 
 class AIAssistResponse(BaseModel):
     success: bool
@@ -470,7 +471,8 @@ async def ai_assist(request: AIAssistRequest, current_request: Request):
             session_id=request.sessionId,
             stage=request.stage,
             user_input=request.userInput,
-            session_context=request.sessionContext
+            session_context=request.sessionContext,
+            force_guidance=request.forceGuidance
         )
         
         status_code = 200 if result["success"] else (429 if "Rate limit" in result.get("error", "") else 500)
