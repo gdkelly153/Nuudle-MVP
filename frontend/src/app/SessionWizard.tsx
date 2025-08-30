@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import Tooltip from "@/components/Tooltip";
-import { CheckCircle, Check } from "lucide-react";
+import { CheckCircle, Check, Target } from "lucide-react";
 import {
   HelpMeNuudleButton,
   AIAssistButton,
@@ -11,13 +11,14 @@ import {
   AIErrorCard,
   SuggestedCause,
 } from "@/components/AIComponents";
-import { AIAssistantProvider, useAIAssistant } from "@/contexts/AIAssistantContext";
+import { CauseAnalysisModal } from "@/components/CauseAnalysisModal";
+import { ActionPlanningModal } from "@/components/ActionPlanningModal";
+import { AIAssistantProvider, useAIAssistant, type ChatMessage } from "@/contexts/AIAssistantContext";
 import { useSummaryDownloader, type SummaryData, type SessionData } from "@/hooks/useSummaryDownloader";
 
 interface ActionableItem {
   id: string;
   cause: string;
-  assumption?: string;
 }
 
 function SessionWizardContent({ sessionId }: { sessionId: string }) {
@@ -26,10 +27,11 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
   const [step, setStep] = useState(0);
   const [showGuidanceHint, setShowGuidanceHint] = useState(false);
   const [guidanceHintShownCount, setGuidanceHintShownCount] = useState(0);
-  const [causes, setCauses] = useState([{ cause: "", assumption: "" }]);
-  const [solutions, setSolutions] = useState<{ [id: string]: string }>({});
+  const [causes, setCauses] = useState([{ id: "cause-0", cause: "" }]);
+  const [solutions, setSolutions] = useState<{ [id: string]: string[] }>({});
+  const [causesSubmitted, setCausesSubmitted] = useState(false);
+  const [playCauseAnimation, setPlayCauseAnimation] = useState(false);
   const [highlightedContainerId, setHighlightedContainerId] = useState<string | null>(null);
-  const [openActionBoxIds, setOpenActionBoxIds] = useState<string[]>([]);
   const [perpetuations, setPerpetuations] = useState<{ id: number; text: string }[]>([{ id: 1, text: "" }]);
   const [step2Phase, setStep2Phase] = useState<"input" | "selection">("input");
   const [selectedPerpetuations, setSelectedPerpetuations] = useState<string[]>([]);
@@ -47,6 +49,21 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [sessionSaved, setSessionSaved] = useState(false);
+  const [analyzingCauseId, setAnalyzingCauseId] = useState<string | null>(null);
+  const [causeAnalysisHistories, setCauseAnalysisHistories] = useState<{ [causeId: string]: ChatMessage[] }>({});
+  const [analyzedCauseIds, setAnalyzedCauseIds] = useState<string[]>([]);
+  
+  // State for action planning modal
+  const [planningActionId, setPlanningActionId] = useState<string | null>(null);
+  const [actionPlanningHistories, setActionPlanningHistories] = useState<{ [actionId: string]: ChatMessage[] }>({});
+  
+  // State for cause exchange workflow
+  const [showCauseExchangeModal, setShowCauseExchangeModal] = useState(false);
+  const [pendingSelections, setPendingSelections] = useState<{
+    analyzingCauseId: string;
+    selections: string[];
+  } | null>(null);
+  const [selectedCausesToReplace, setSelectedCausesToReplace] = useState<string[]>([]);
   
   // New state for AI-powered validation
   const [isValidatingProblem, setIsValidatingProblem] = useState(false);
@@ -66,6 +83,11 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
   const [cachedSessionData, setCachedSessionData] = useState<SessionData | null>(null);
   const [cachedSummary, setCachedSummary] = useState<any>(null);
   
+  // Self-awareness analysis state
+  const [isAnalyzingSelfAwareness, setIsAnalyzingSelfAwareness] = useState(false);
+  const [selfAwarenessDetected, setSelfAwarenessDetected] = useState<boolean | null>(null);
+  const [showMyContributions, setShowMyContributions] = useState(false);
+  
   // Use the summary downloader hook
   const summaryDownloader = useSummaryDownloader();
   
@@ -79,7 +101,6 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
       try {
         const painPointParam = searchParams.get('pain_point');
         const causesParam = searchParams.get('causes');
-        const assumptionsParam = searchParams.get('assumptions');
         const perpetuationsParam = searchParams.get('perpetuations');
         const solutionsParam = searchParams.get('solutions');
         const fearsParam = searchParams.get('fears');
@@ -89,27 +110,27 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
           setPainPoint(decodeURIComponent(painPointParam));
         }
 
-        if (causesParam && assumptionsParam) {
+        if (causesParam) {
           const causesData = JSON.parse(decodeURIComponent(causesParam));
-          const assumptionsData = JSON.parse(decodeURIComponent(assumptionsParam));
           
           const combinedCauses = [];
           if (causesData.primary_cause) {
             combinedCauses.push({
+              id: `cause-${combinedCauses.length}`,
               cause: causesData.primary_cause,
-              assumption: assumptionsData[0] || ""
             });
           }
-          causesData.sub_causes?.forEach((cause: string, index: number) => {
+          causesData.sub_causes?.forEach((cause: string) => {
             combinedCauses.push({
+              id: `cause-${combinedCauses.length}`,
               cause,
-              assumption: assumptionsData[index + 1] || ""
             });
           });
-          
+
           if (combinedCauses.length > 0) {
             setCauses(combinedCauses);
           }
+          
         }
 
         if (perpetuationsParam) {
@@ -125,9 +146,9 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
         if (solutionsParam) {
           const solutionsData = JSON.parse(decodeURIComponent(solutionsParam));
           if (solutionsData.length > 0) {
-            const solutionsObj: { [id: string]: string } = {};
+            const solutionsObj: { [id: string]: string[] } = {};
             solutionsData.forEach((solution: string, index: number) => {
-              solutionsObj[`cause-${index}`] = solution;
+              solutionsObj[`cause-${index}`] = [solution];
             });
             setSolutions(solutionsObj);
           }
@@ -189,8 +210,8 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
   const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
   const headerRefs = useRef<(HTMLHeadingElement | null)[]>([]);
   const painPointTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const causeTextAreaRefs = useRef<Array<[HTMLTextAreaElement | null, HTMLTextAreaElement | null]>>([]);
-  const readOnlyCauseTextAreaRefs = useRef<Array<[HTMLTextAreaElement | null, HTMLTextAreaElement | null]>>([]);
+  const causeTextAreaRefs = useRef<Array<HTMLTextAreaElement | null>>([]);
+  const readOnlyCauseTextAreaRefs = useRef<Array<HTMLTextAreaElement | null>>([]);
   const perpetuationsTextareaRefs = useRef<Array<HTMLTextAreaElement | null>>([]);
   const solutionTextareaRefs = useRef<Map<string, HTMLTextAreaElement | null>>(new Map());
   const fearTextareaRefs = useRef<Map<string, { name: HTMLTextAreaElement | null; mitigation: HTMLTextAreaElement | null; contingency: HTMLTextAreaElement | null; }>>(new Map());
@@ -203,13 +224,12 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
 
   // Calculate actionableItems directly during render to avoid layout shifts
   const actionableItems = useMemo(() => {
-    if (step === 3) {
+    if (step === 3 || step === 4) {
       const causeItems: ActionableItem[] = causes
         .filter(c => c.cause.trim() !== "")
         .map((c, index) => ({
           id: `cause-${index}`,
           cause: c.cause,
-          assumption: c.assumption,
         }));
 
       const perpetuationItems: ActionableItem[] = perpetuations
@@ -236,22 +256,6 @@ useLayoutEffect(() => {
     adjustTextareaHeight(textarea as HTMLTextAreaElement);
   });
 
-  // Sync cause and assumption textareas after individual adjustment
-  const syncPairs = (pairs: Array<[HTMLTextAreaElement | null, HTMLTextAreaElement | null]>) => {
-    pairs.forEach(pair => {
-      const [causeTextArea, assumptionTextArea] = pair;
-      if (causeTextArea && assumptionTextArea) {
-        const causeHeight = causeTextArea.clientHeight;
-        const assumptionHeight = assumptionTextArea.clientHeight;
-        const maxHeight = Math.max(causeHeight, assumptionHeight);
-        causeTextArea.style.height = `${maxHeight}px`;
-        assumptionTextArea.style.height = `${maxHeight}px`;
-      }
-    });
-  };
-
-  syncPairs(causeTextAreaRefs.current);
-  syncPairs(readOnlyCauseTextAreaRefs.current);
 }, [step, causes, perpetuations, solutions, fears, actionPlan, step2Phase, actionableItems]);
 
 // Scroll to position header at 20vh from top when step changes
@@ -303,22 +307,6 @@ useEffect(() => {
           parseFloat(getComputedStyle(textareaElement).minHeight))}px`;
       });
 
-      // Sync cause and assumption textarea pairs
-      const syncPairs = (pairs: Array<[HTMLTextAreaElement | null, HTMLTextAreaElement | null]>) => {
-        pairs.forEach(pair => {
-          const [causeTextArea, assumptionTextArea] = pair;
-          if (causeTextArea && assumptionTextArea) {
-            const causeHeight = causeTextArea.clientHeight;
-            const assumptionHeight = assumptionTextArea.clientHeight;
-            const maxHeight = Math.max(causeHeight, assumptionHeight);
-            causeTextArea.style.height = `${maxHeight}px`;
-            assumptionTextArea.style.height = `${maxHeight}px`;
-          }
-        });
-      };
-
-      syncPairs(causeTextAreaRefs.current);
-      syncPairs(readOnlyCauseTextAreaRefs.current);
     }
   };
 
@@ -340,7 +328,6 @@ useEffect(() => {
   useEffect(() => {
     if (step !== 3) {
       setHighlightedContainerId(null);
-      // Don't clear openActionBoxIds here - let the Next button handle it
     }
   }, [step]);
 
@@ -426,6 +413,44 @@ useEffect(() => {
     }
   };
 
+  // Self-awareness analysis function
+  const analyzeSelfAwareness = async (causesList: string[]): Promise<boolean> => {
+    if (causesList.length === 0) return false;
+    
+    setIsAnalyzingSelfAwareness(true);
+    
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ai/analyze-self-awareness`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          causes: causesList
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Self-awareness analysis failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || "Self-awareness analysis failed");
+      }
+
+      return result.selfAwarenessDetected || false;
+
+    } catch (error) {
+      console.error("Self-awareness analysis error:", error);
+      // If analysis fails, default to showing the contributions step
+      return false;
+    } finally {
+      setIsAnalyzingSelfAwareness(false);
+    }
+  };
+
   const startSession = async () => {
     if (painPoint.trim()) {
       // Use AI-powered validation
@@ -444,22 +469,52 @@ useEffect(() => {
     }
   };
 
-  const nextStep = () => setStep(step + 1);
-  const prevStep = () => setStep(step - 1);
+  const nextStep = async () => {
+    // Special handling when moving from Step 1 (Contributing Causes)
+    if (step === 1) {
+      const filteredCauses = causes.filter(c => c.cause.trim() !== "").map(c => c.cause);
+      
+      if (filteredCauses.length > 0) {
+        const selfAwarenessResult = await analyzeSelfAwareness(filteredCauses);
+        setSelfAwarenessDetected(selfAwarenessResult);
+        
+        if (selfAwarenessResult) {
+          // User already shows self-awareness, skip to Step 3 (Solutions)
+          setStep(3);
+          return;
+        } else {
+          // User doesn't show self-awareness, show "My Contributions" step
+          setShowMyContributions(true);
+          setStep(2);
+          return;
+        }
+      }
+    }
+    
+    // Default behavior for all other steps
+    setStep(step + 1);
+  };
+  
+  const prevStep = () => {
+    // Special handling when going back from Step 3 to potentially Step 1
+    if (step === 3 && selfAwarenessDetected === true) {
+      // If we skipped the contributions step, go back to Step 1
+      setStep(1);
+      return;
+    }
+    
+    setStep(step - 1);
+  };
 
-  const handleCauseChange = (
-    index: number,
-    field: "cause" | "assumption",
-    value: string
-  ) => {
+  const handleCauseChange = (index: number, value: string) => {
     const newCauses = [...causes];
-    newCauses[index][field] = value;
+    newCauses[index].cause = value;
     setCauses(newCauses);
   };
 
   const addCause = (causeText = "") => {
     if (causes.length < 5) {
-      setCauses([...causes, { cause: causeText, assumption: "" }]);
+      setCauses([...causes, { id: `cause-${causes.length}`, cause: causeText }]);
     }
   };
 
@@ -507,44 +562,43 @@ useEffect(() => {
     }
   };
 
-  const handleSolutionSelection = (id: string) => {
-    // Only allow selection if we're on step 3
-    if (step !== 3) return;
-    
-    // Initialize solution text if it doesn't exist
-    if (solutions[id] === undefined) {
-      setSolutions(prev => ({ ...prev, [id]: "" }));
-    }
-    
-    // Add to open action boxes if not already open
-    setOpenActionBoxIds(prev => {
-      if (!prev.includes(id)) {
-        return [...prev, id];
-      }
-      return prev;
-    });
-    
-    // Always set the highlighted container to the clicked item
-    setHighlightedContainerId(id);
-  };
 
-  const removeSolutionAction = (id: string) => {
-    // Remove from open action boxes (hide the box)
-    setOpenActionBoxIds(prev => prev.filter(boxId => boxId !== id));
-    
-    // Clear highlight only if this was the highlighted container
-    if (highlightedContainerId === id) {
-      setHighlightedContainerId(null);
-    }
-    
-    // Note: We do NOT delete from solutions to preserve the text
-  };
-
-  const handleSolutionActionChange = (id: string, action: string) => {
+  const handleSolutionActionChange = (id: string, actionIndex: number, action: string) => {
     setSolutions((prev) => ({
       ...prev,
-      [id]: action,
+      [id]: prev[id] ? prev[id].map((a, i) => i === actionIndex ? action : a) : [action],
     }));
+  };
+
+  const addSolutionAction = (id: string) => {
+    setSolutions((prev) => ({
+      ...prev,
+      [id]: [...(prev[id] || []), ""],
+    }));
+  };
+
+  const removeSolutionAction = (id: string, actionIndex?: number) => {
+    setSolutions(prev => {
+      if (typeof actionIndex === 'number') {
+        // Remove specific action
+        const updatedActions = prev[id] ? prev[id].filter((_, i) => i !== actionIndex) : [];
+        if (updatedActions.length === 0) {
+          const newSolutions = { ...prev };
+          delete newSolutions[id];
+          return newSolutions;
+        } else {
+          return {
+            ...prev,
+            [id]: updatedActions,
+          };
+        }
+      } else {
+        // Remove all actions for this id
+        const newSolutions = { ...prev };
+        delete newSolutions[id];
+        return newSolutions;
+      }
+    });
   };
 
   const handleFearSelection = (id: string) => {
@@ -586,6 +640,7 @@ useEffect(() => {
     }));
   };
 
+
   const handleActionSelection = (actionId: string) => {
     // Only allow selection if we're on step 5
     if (step !== 5) return;
@@ -613,6 +668,95 @@ useEffect(() => {
     }));
   };
 
+  const handleRootCauseSelections = (analyzingCauseId: string, selections: string[]) => {
+    if (selections.length === 0) return;
+
+    // Calculate available slots (5 total causes maximum)
+    const currentNonEmptyCauses = causes.filter(c => c.cause.trim() !== '').length;
+    const availableSlots = 5 - currentNonEmptyCauses;
+
+    // First selection replaces the original cause, additional selections are new causes
+    const additionalSelectionsNeeded = selections.length - 1;
+
+    if (additionalSelectionsNeeded <= availableSlots) {
+      // We can add all selections without exceeding the limit
+      const newCauses = [...causes];
+      const newlyAnalyzedIds = [analyzingCauseId]; // Track all affected causes
+      
+      // Replace the original cause with the first selection
+      const causeIndex = newCauses.findIndex(c => c.id === analyzingCauseId);
+      if (causeIndex !== -1) {
+        newCauses[causeIndex] = { ...newCauses[causeIndex], cause: selections[0] };
+      }
+
+      // Add additional selections as new causes
+      for (let i = 1; i < selections.length; i++) {
+        const newId = `cause-${newCauses.length}`;
+        newCauses.push({
+          id: newId,
+          cause: selections[i]
+        });
+        newlyAnalyzedIds.push(newId); // Track the new cause as analyzed
+      }
+
+      setCauses(newCauses);
+      
+      // Mark all affected causes as analyzed
+      setAnalyzedCauseIds(prev => [...new Set([...prev, ...newlyAnalyzedIds])]);
+    } else {
+      // We need to show the cause exchange modal
+      setPendingSelections({
+        analyzingCauseId,
+        selections
+      });
+      setShowCauseExchangeModal(true);
+    }
+  };
+
+  const handleCauseExchange = (causesToReplace: string[]) => {
+    if (!pendingSelections) return;
+
+    const { analyzingCauseId, selections } = pendingSelections;
+    const newCauses = [...causes];
+
+    // Replace the original analyzed cause with the first selection
+    const originalCauseIndex = newCauses.findIndex(c => c.id === analyzingCauseId);
+    if (originalCauseIndex !== -1) {
+      newCauses[originalCauseIndex] = { ...newCauses[originalCauseIndex], cause: selections[0] };
+    }
+
+    // Replace the selected causes with the remaining selections
+    let selectionIndex = 1;
+    causesToReplace.forEach(causeToReplace => {
+      if (selectionIndex < selections.length) {
+        const causeIndex = newCauses.findIndex(c => c.cause === causeToReplace);
+        if (causeIndex !== -1) {
+          newCauses[causeIndex] = { ...newCauses[causeIndex], cause: selections[selectionIndex] };
+          selectionIndex++;
+        }
+      }
+    });
+
+    setCauses(newCauses);
+    setShowCauseExchangeModal(false);
+    setPendingSelections(null);
+    setSelectedCausesToReplace([]);
+  };
+
+  const handleActionPlanning = (actionId: string, finalActions?: string[]) => {
+    if (finalActions && finalActions.length > 0) {
+      // Update the solutions state with the planned actions array
+      setSolutions(prev => ({
+        ...prev,
+        [actionId]: finalActions
+      }));
+
+      // Set the highlighted container to show the completed actions
+      setHighlightedContainerId(actionId);
+    }
+    
+    setPlanningActionId(null);
+  };
 
   const handleBack = () => {
     prevStep();
@@ -641,11 +785,9 @@ useEffect(() => {
   // Helper function to clean up empty inputs before AI requests
   const cleanupEmptyInputs = () => {
     // Clean up causes
-    const filteredCauses = causes.filter((c) =>
-      c.cause.trim() !== "" || (c.assumption && c.assumption.trim() !== "")
-    );
+    const filteredCauses = causes.filter((c) => c.cause.trim() !== "");
     if (filteredCauses.length !== causes.length) {
-      setCauses(filteredCauses.length > 0 ? filteredCauses : [{ cause: "", assumption: "" }]);
+      setCauses(filteredCauses.length > 0 ? filteredCauses : [{ id: "cause-0", cause: "" }]);
     }
 
     // Clean up perpetuations
@@ -654,16 +796,14 @@ useEffect(() => {
       setPerpetuations(filteredPerpetuations.length > 0 ? filteredPerpetuations : [{ id: 1, text: "" }]);
     }
 
-    // Clean up solutions (remove empty action boxes)
+    // Clean up solutions (remove empty actions)
     const filteredSolutions = Object.fromEntries(
-      Object.entries(solutions).filter(([_, action]) => action.trim() !== "")
+      Object.entries(solutions)
+        .map(([id, actions]) => [id, actions.filter(action => action.trim() !== "")])
+        .filter(([_, actions]) => (actions as string[]).length > 0)
     );
     if (Object.keys(filteredSolutions).length !== Object.keys(solutions).length) {
       setSolutions(filteredSolutions);
-      // Also update open action boxes to only include those with content
-      setOpenActionBoxIds(prev =>
-        prev.filter(id => filteredSolutions[id] && filteredSolutions[id].trim() !== "")
-      );
     }
 
     // Clean up fears (remove empty fear entries)
@@ -692,7 +832,6 @@ useEffect(() => {
     return (
       data1.pain_point === data2.pain_point &&
       JSON.stringify(data1.causes) === JSON.stringify(data2.causes) &&
-      JSON.stringify(data1.assumptions) === JSON.stringify(data2.assumptions) &&
       JSON.stringify(data1.perpetuations) === JSON.stringify(data2.perpetuations) &&
       JSON.stringify(data1.solutions) === JSON.stringify(data2.solutions) &&
       JSON.stringify(data1.fears) === JSON.stringify(data2.fears) &&
@@ -702,18 +841,16 @@ useEffect(() => {
 
   const handleSubmit = async () => {
     // Build current session data
-    const filteredCauses = causes.filter(
-      (c) => c.cause.trim() !== "" || (c.assumption && c.assumption.trim() !== "")
-    );
+    const filteredCauses = causes.filter((c) => c.cause.trim() !== "");
 
     const currentSessionData: SessionData = {
       pain_point: painPoint,
       causes: filteredCauses.map((c) => c.cause),
-      assumptions: filteredCauses.map((c) => c.assumption || ""),
+      assumptions: [], // No longer using assumptions
       perpetuations: perpetuations
         .map((p) => p.text)
         .filter((perpetuation) => perpetuation.trim() !== ""),
-      solutions: Object.values(solutions).filter((solution) => solution.trim() !== ""),
+      solutions: Object.values(solutions).flat().filter((solution) => solution.trim() !== ""),
       fears: Object.values(fears).filter(
         (fear) => fear.name.trim() !== "" || fear.mitigation.trim() !== "" || fear.contingency.trim() !== ""
       ),
@@ -753,19 +890,17 @@ useEffect(() => {
     setSubmitError(null);
     
     try {
-      const filteredCauses = causes.filter(
-        (c) => c.cause.trim() !== "" || (c.assumption && c.assumption.trim() !== "")
-      );
+      const filteredCauses = causes.filter((c) => c.cause.trim() !== "");
 
       const sessionData = {
         session_id: sessionId,
         pain_point: painPoint,
         causes: filteredCauses.map((c) => c.cause),
-        assumptions: filteredCauses.map((c) => c.assumption || ""),
+        assumptions: [], // No longer using assumptions
         perpetuations: perpetuations
           .map((p) => p.text)
           .filter((perpetuation) => perpetuation.trim() !== ""),
-        solutions: Object.values(solutions).filter((solution) => solution.trim() !== ""),
+        solutions: Object.values(solutions).flat().filter((solution) => solution.trim() !== ""),
         fears: Object.values(fears).filter(
           (fear) => fear.name.trim() !== "" || fear.mitigation.trim() !== "" || fear.contingency.trim() !== ""
         ),
@@ -775,7 +910,7 @@ useEffect(() => {
             : actionPlan.selectedActionIds.length > 0
             ? actionPlan.selectedActionIds
                 .filter(id => id !== "other")
-                .map(id => solutions[id] || "")
+                .flatMap(id => solutions[id] || [])
                 .join("; ")
             : "",
         ai_summary: summaryDownloader.summaryData || null,
@@ -817,18 +952,16 @@ useEffect(() => {
 
   const closeSummaryModal = () => {
     // Build current session data for caching consistency
-    const filteredCauses = causes.filter(
-      (c) => c.cause.trim() !== "" || (c.assumption && c.assumption.trim() !== "")
-    );
+    const filteredCauses = causes.filter((c) => c.cause.trim() !== "");
 
     const currentSessionData: SessionData = {
       pain_point: painPoint,
       causes: filteredCauses.map((c) => c.cause),
-      assumptions: filteredCauses.map((c) => c.assumption || ""),
+      assumptions: [], // No longer using assumptions
       perpetuations: perpetuations
         .map((p) => p.text)
         .filter((perpetuation) => perpetuation.trim() !== ""),
-      solutions: Object.values(solutions).filter((solution) => solution.trim() !== ""),
+      solutions: Object.values(solutions).flat().filter((solution) => solution.trim() !== ""),
       fears: Object.values(fears).filter(
         (fear) => fear.name.trim() !== "" || fear.mitigation.trim() !== "" || fear.contingency.trim() !== ""
       ),
@@ -838,7 +971,7 @@ useEffect(() => {
           : actionPlan.selectedActionIds.length > 0
           ? actionPlan.selectedActionIds
               .filter(id => id !== "other")
-              .map(id => solutions[id] || "")
+              .flatMap(id => solutions[id] || [])
               .join("; ")
           : "",
     };
@@ -863,35 +996,8 @@ useEffect(() => {
   };
 
 
-const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: number) => {
+const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
   const textarea = e.currentTarget;
-
-  // For paired textareas, sync their heights
-  if (index !== undefined) {
-    const pair = causeTextAreaRefs.current[index];
-    if (pair) {
-      const [causeTextArea, assumptionTextArea] = pair;
-      if (causeTextArea && assumptionTextArea) {
-        // Reset both to auto to get their natural scrollHeight
-        causeTextArea.style.height = 'auto';
-        assumptionTextArea.style.height = 'auto';
-
-        const causeScrollHeight = causeTextArea.scrollHeight;
-        const assumptionScrollHeight = assumptionTextArea.scrollHeight;
-        
-        const maxHeight = Math.max(causeScrollHeight, assumptionScrollHeight);
-        
-        const minHeight = parseFloat(getComputedStyle(textarea).minHeight);
-        const finalHeight = `${Math.max(maxHeight, minHeight)}px`;
-
-        causeTextArea.style.height = finalHeight;
-        assumptionTextArea.style.height = finalHeight;
-        return; // Exit after handling paired textareas
-      }
-    }
-  }
-
-  // Fallback for non-paired textareas
   textarea.style.height = 'auto';
   textarea.style.height = `${Math.max(textarea.scrollHeight, parseFloat(getComputedStyle(textarea).minHeight))}px`;
 };
@@ -906,35 +1012,63 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
     }
   };
 
+
   return (
     <>
+      {analyzingCauseId && (
+        <CauseAnalysisModal
+          causeId={analyzingCauseId}
+          causeText={causes.find(c => c.id === analyzingCauseId)?.cause || ''}
+          history={causeAnalysisHistories[analyzingCauseId] || []}
+          totalCauses={causes.filter(c => c.cause.trim() !== '').length}
+          painPoint={painPoint}
+          onClose={(selections: string[]) => {
+            if (selections.length > 0) {
+              const currentCausesLength = causes.length;
+              
+              // Handle root cause selections first
+              handleRootCauseSelections(analyzingCauseId!, selections);
+              
+              // Mark all affected causes as analyzed
+              setAnalyzedCauseIds(prev => {
+                const newAnalyzedIds = [...prev, analyzingCauseId!]; // Original cause
+                
+                // Add IDs for any new causes that will be created from additional selections
+                for (let i = 1; i < selections.length; i++) {
+                  newAnalyzedIds.push(`cause-${currentCausesLength + i - 1}`);
+                }
+                
+                return [...new Set(newAnalyzedIds)]; // Remove duplicates
+              });
+            }
+            setAnalyzingCauseId(null);
+          }}
+        />
+      )}
+      
+      {planningActionId && (
+        <ActionPlanningModal
+          causeId={planningActionId}
+          causeText={actionableItems.find(item => item.id === planningActionId)?.cause || ''}
+          isContribution={planningActionId.startsWith('perp-')}
+          history={actionPlanningHistories[planningActionId] || []}
+          sessionContext={{
+            pain_point: painPoint,
+            causes: causes.filter(c => c.cause.trim() !== '').map(c => c.cause),
+            perpetuations: perpetuations.filter(p => selectedPerpetuations.includes(String(p.id))).map(p => p.text),
+            solutions: Object.values(solutions).flat().filter(s => s.trim() !== ''),
+            fears: Object.values(fears).filter(f => f.name.trim() !== '' || f.mitigation.trim() !== '' || f.contingency.trim() !== '')
+          }}
+          onClose={(finalActions) => handleActionPlanning(planningActionId, finalActions)}
+        />
+      )}
       <style>{`
-        .container-highlighted {
-          border: 2px solid var(--golden-mustard) !important;
-          border-radius: 8px;
-          box-shadow: 0 0 0 4px var(--golden-mustard-focus) !important;
-        }
-        .container-highlighted .read-only-textarea {
-          border: 1px solid #ccc !important;
-        }
-        .container-highlighted .auto-resizing-textarea {
-          border: 1px solid #ccc !important;
-        }
         .selectable-item .read-only-textarea {
           pointer-events: none;
-        }
-        .auto-resizing-textarea {
-          padding: 0.5rem;
         }
         .my-contributions-section {
         }
         .my-contributions-section .item-label {
-          margin-bottom: 4px !important;
-        }
-        .action-textarea-container {
-          margin-top: 8px;
-        }
-        .action-textarea-container .item-label {
           margin-bottom: 4px !important;
         }
         
@@ -963,6 +1097,9 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
           animation: pulse-glow 2s infinite;
           border-radius: 12px;
         }
+        .pulse-once {
+          animation: pulse-glow-once 2s 1;
+        }
         .landing-button.highlighted {
           box-shadow: 0 0 0 3px var(--refined-balance-teal-focus);
           border-color: var(--refined-balance-teal);
@@ -975,6 +1112,67 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
           50% {
             box-shadow: 0 0 0 8px rgba(65, 173, 176, 0.1);
           }
+        }
+        @keyframes pulse-glow-once {
+          0% {
+            transform: scale(1);
+          }
+          50% {
+            transform: scale(1.05);
+          }
+          100% {
+            transform: scale(1);
+          }
+        }
+        
+        /* Skip button styles */
+        .skip-button {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-medium);
+          color: var(--text-secondary);
+          padding: 0.75rem 1rem;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          font-size: 0.9rem;
+        }
+        
+        .skip-button:hover:not(:disabled) {
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+          border-color: var(--golden-mustard);
+        }
+        
+        .skip-button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        
+        /* Root cause badge styles - exactly match AI assist button structure */
+        .target-icon-wrapper {
+          position: absolute;
+          top: 0;
+          left: 0;
+          transform: translate(-25%, -40%);
+          z-index: 10;
+          pointer-events: none;
+        }
+        
+        .target-icon {
+          color: white;
+        }
+        
+        .root-cause-badge {
+          padding: 4px 12px;
+          background: radial-gradient(ellipse at center, rgba(65, 173, 176, 0.2) 30%, rgba(65, 173, 176, 0.4) 100%);
+          border: 1px solid var(--refined-balance-teal);
+          border-radius: 20px;
+          color: var(--refined-balance-teal);
+          font-weight: 500;
+          font-size: 12px;
+          display: inline-block;
+          position: relative;
+          box-shadow: 0 2px 4px rgba(65, 173, 176, 0.3);
         }
       `}</style>
       <main className="wizard-container">
@@ -1003,6 +1201,11 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
     className="auto-resizing-textarea"
     placeholder="What problem would you like to work through today?"
     disabled={step !== 0}
+    style={{
+      textAlign: 'center',
+      paddingLeft: '1.25em',
+      paddingRight: '1.25em'
+    }}
   />
 </div>
               </div>
@@ -1044,7 +1247,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
               buttonStep={0}
               isHighlighted={showGuidanceHint}
             />
-            <Tooltip text="Attempt the prompt to proceed." isDisabled={step === 0 && (!painPoint.trim() || isValidatingProblem)}>
+            <Tooltip text="Enter a problem statement to proceed." isDisabled={step === 0 && (!painPoint.trim() || isValidatingProblem)}>
               <button
                 type="button"
                 onClick={startSession}
@@ -1088,89 +1291,71 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
             <div className="input-group">
               <label className="step-description">
                 <p>
-                  We live in a causal universe. Every effect has a cause that precedes it. Your problem is the effect.
-                  <span style={{ display: 'block', textIndent: '1em' }}>
-                    List up to five causes that you think could be contributing to the problem. For each cause that you identify, consider if there is a potential assumption that you might be making. An assumption is something believed to be true without evidence and requires validation through inquiry to be considered a true cause.
-                  </span>
+                  Every effect has a cause that precedes it. Your problem is the effect. Start by brainstorming the causes you think might be contributing to your problem. After you're done, click submit and the AI assistant will become available to help you uncover the true root causes.
                 </p>
               </label>
-              <div className="causes-container">
-                {causes.map((item, index) => {
-                  if (!causeTextAreaRefs.current[index]) {
-                    causeTextAreaRefs.current[index] = [null, null];
-                  }
-                  return (
-                    <div key={index} className="deletable-item-container">
-                      <div className="cause-assumption-pair">
-                        <div className="cause-column" style={{ position: 'relative' }}>
-                          <label className="item-label" style={{ display: 'block', marginBottom: '4px' }}>Contributing Cause</label>
-                          <textarea
-                            ref={(el) => {
-                              causeTextAreaRefs.current[index][0] = el;
-                            }}
-                            value={item.cause}
-                            onChange={(e) => {
-                              handleCauseChange(index, "cause", e.target.value);
-                              ai.clearResponseForStage('root_cause');
-                            }}
-                            onInput={(e) => syncTextareaHeights(e, index)}
-                            className="auto-resizing-textarea"
-                            disabled={step !== 1}
-                          />
-                        </div>
-                        <div className="assumption-column" style={{ position: 'relative' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-                            <label className="item-label" style={{ display: 'block', margin: 0 }}>Potential Assumption</label>
-                            {index > 0 && (
-                              <button type="button" className="delete-item-button" style={{ top: '-4px' }} onClick={() => removeCause(index)} disabled={step !== 1}>
-                                &times;
-                              </button>
-                            )}
-                          </div>
-                          <textarea
-                            ref={(el) => {
-                              causeTextAreaRefs.current[index][1] = el;
-                            }}
-                            value={item.assumption || ""}
-                            onChange={(e) => {
-                              handleCauseChange(index, "assumption", e.target.value);
-                              ai.clearResponseForStage('identify_assumptions');
-                            }}
-                            onInput={(e) => syncTextareaHeights(e, index)}
-                            className="auto-resizing-textarea"
-                            disabled={step !== 1}
+              <div className="items-container">
+                {causes.map((item, index) => (
+                  <div key={item.id} className="deletable-item-container">
+                    <textarea
+                      ref={(el) => {
+                        causeTextAreaRefs.current[index] = el;
+                      }}
+                      value={item.cause}
+                      onChange={(e) => {
+                        handleCauseChange(index, e.target.value);
+                        ai.clearResponseForStage('root_cause');
+                      }}
+                      onInput={(e) => syncTextareaHeights(e)}
+                      className="auto-resizing-textarea"
+                      placeholder={`Contributing Cause ${index + 1}`}
+                      disabled={step !== 1}
+                      style={{
+                        textAlign: 'center',
+                        paddingLeft: '1.25em',
+                        paddingRight: '1.25em'
+                      }}
+                    />
+                    {causes.length > 1 && (
+                      <div className="delete-button-wrapper">
+                        <button type="button" className="delete-item-button" onClick={() => removeCause(index)} disabled={step !== 1}>
+                          &times;
+                        </button>
+                      </div>
+                    )}
+                    {causesSubmitted && !analyzedCauseIds.includes(item.id) && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '0.5rem' }}>
+                        <div style={{ position: 'relative', zIndex: 10 }} className={playCauseAnimation ? 'pulse-once' : ''}>
+                          <AIAssistButton
+                            stage="root_cause"
+                            customButtonText="Help me find the root cause"
+                            isLoading={analyzingCauseId === item.id}
+                            onRequest={() => setAnalyzingCauseId(item.id)}
+                            disabled={step !== 1 || !item.cause.trim() || !causesSubmitted}
+                            sessionId={sessionId}
+                            context={{ causes }}
+                            currentStep={step}
+                            buttonStep={1}
+                            causesSubmitted={causesSubmitted}
+                            causeText={item.cause}
                           />
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="cause-assumption-pair ai-button-row mt-2">
-                <div className="cause-column">
-                  <AIAssistButton
-                    stage="root_cause"
-                    isLoading={ai.loadingStage === 'root_cause'}
-                    onRequest={() => ai.requestAssistance("root_cause", causes.map(c => c.cause).join(', '), { painPoint, causes })}
-                    disabled={causes.filter(c => c.cause.trim()).length < 1 || !ai.canUseAI('root_cause')}
-                    sessionId={sessionId}
-                    context={{ causes }}
-                    currentStep={step}
-                    buttonStep={1}
-                  />
-                </div>
-                <div className="assumption-column">
-                  <AIAssistButton
-                    stage="identify_assumptions"
-                    isLoading={ai.loadingStage === 'identify_assumptions'}
-                    onRequest={() => ai.requestAssistance("identify_assumptions", causes.map(c => c.assumption).join(', '), { painPoint, causes })}
-                    disabled={causes.filter(c => c.cause.trim()).length < 1 || !ai.canUseAI('identify_assumptions')}
-                    sessionId={sessionId}
-                    context={{ painPoint, causes }}
-                    currentStep={step}
-                    buttonStep={1}
-                  />
-                </div>
+                    )}
+                    {causesSubmitted && analyzedCauseIds.includes(item.id) && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '0.5rem' }}>
+                        <div style={{ position: 'relative', zIndex: 10 }}>
+                          <div className="target-icon-wrapper">
+                            <Target size={16} className="target-icon" />
+                          </div>
+                          <div className="root-cause-badge">
+                            Root cause found!
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -1183,9 +1368,29 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                 Add another cause
               </button>
             )}
-            <Tooltip text="Attempt the prompt to proceed." isDisabled={step === 1 && (causes.length > 0 && causes[0].cause.trim() === "")}>
-              <button type="button" onClick={() => cleanupAndProceed(causes, setCauses, nextStep)} disabled={step !== 1 || (causes.length > 0 && causes[0].cause.trim() === "")}>
-                Next
+            <Tooltip
+              text={causesSubmitted ? "Proceed to the next step" : "Submit your causes to enable AI analysis"}
+              isDisabled={!(step === 1 && (causes.length > 0 && causes[0].cause.trim() !== ""))}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  if (causesSubmitted) {
+                    cleanupAndProceed(causes, setCauses, nextStep);
+                  } else {
+                    // Filter out empty causes when submitting
+                    const filteredCauses = causes.filter(c => c.cause.trim() !== "");
+                    if (filteredCauses.length > 0) {
+                      setCauses(filteredCauses);
+                    }
+                    setCausesSubmitted(true);
+                    setPlayCauseAnimation(true);
+                    setTimeout(() => setPlayCauseAnimation(false), 4000);
+                  }
+                }}
+                disabled={step !== 1 || (causes.length > 0 && causes[0].cause.trim() === "") || isAnalyzingSelfAwareness}
+              >
+                {isAnalyzingSelfAwareness ? "Analyzing..." : (causesSubmitted ? "Next" : "Submit")}
               </button>
             </Tooltip>
           </div>
@@ -1201,159 +1406,110 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
           )}
         </div>
 
-        {/* Step 2: Perpetuation */}
-        <div className={getStepClass(2)} ref={(el) => { stepRefs.current[2] = el; }}>
-          {step2Phase === "input" ? (
-            <>
-              <h1 ref={(el) => { headerRefs.current[2] = el; }}>If you were to perpetuate the problem, what actions could you take?</h1>
-              <p className="step-description">Reflecting on these potential actions helps to uncover the behaviors and patterns that keep the problem in place, which is a crucial step towards solving it. If I wanted to make sure this problem continued, I would...</p>
-              <div className="form-content initial-form-content">
-                <div className="input-group">
-                  <div className="items-container">
-                    {perpetuations.map((perpetuation, index) => (
-                      <div key={perpetuation.id} className="deletable-item-container">
-                        <textarea
-                          ref={el => {
-                            if (el) perpetuationsTextareaRefs.current[index] = el;
-                          }}
-                          value={perpetuation.text}
-                          onChange={(e) => {
-                            handlePerpetuationChange(perpetuation.id, e.target.value);
-                            ai.clearResponseForStage('perpetuation');
-                          }}
-                          onInput={(e) => syncTextareaHeights(e)}
-                          className="auto-resizing-textarea"
-                          disabled={step !== 2}
-                        />
-                        {perpetuations.length > 1 && (
+        {/* Step 2: My Contributions (conditionally shown) */}
+        {showMyContributions && (
+          <div className={getStepClass(2)} ref={(el) => { stepRefs.current[2] = el; }}>
+            <h1 ref={(el) => { headerRefs.current[2] = el; }}>Let's consider your role in the problem.</h1>
+            <p className="step-description">Sometimes, our own habits or reactions can unintentionally keep a problem going. Can you think of any actions you take that might be contributing?</p>
+            <div className="form-content initial-form-content">
+              <div className="input-group">
+                <div className="items-container">
+                  {perpetuations.map((perpetuation, index) => (
+                    <div key={perpetuation.id} className="deletable-item-container">
+                      <textarea
+                        ref={el => {
+                          if (el) perpetuationsTextareaRefs.current[index] = el;
+                        }}
+                        value={perpetuation.text}
+                        onChange={(e) => {
+                          handlePerpetuationChange(perpetuation.id, e.target.value);
+                          ai.clearResponseForStage('perpetuation');
+                        }}
+                        onInput={(e) => syncTextareaHeights(e)}
+                        className="auto-resizing-textarea"
+                        placeholder={`My Contribution ${index + 1}`}
+                        disabled={step !== 2}
+                        style={{
+                          textAlign: 'center',
+                          paddingLeft: '1.25em',
+                          paddingRight: '1.25em'
+                        }}
+                      />
+                      {perpetuations.length > 1 && (
+                        <div className="delete-button-wrapper">
                           <button type="button" className="delete-item-button" onClick={() => removePerpetuation(perpetuation.id)} disabled={step !== 2}>
                             &times;
                           </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="ai-button-container mt-2">
-                  <AIAssistButton
-                    stage="perpetuation"
-                    isLoading={ai.loadingStage === 'perpetuation'}
-                    onRequest={() => ai.requestAssistance("perpetuation", perpetuations.map(p => p.text).join(', '), { painPoint, causes, perpetuations })}
-                    disabled={perpetuations.filter(p => p.text.trim()).length === 0 || !ai.canUseAI('perpetuation')}
-                    sessionId={sessionId}
-                    context={{ perpetuations }}
-                    currentStep={step}
-                    buttonStep={2}
-                  />
-                </div>
-              </div>
-              <div className="button-container" style={{ marginTop: '1rem' }}>
-                <button type="button" onClick={prevStep} disabled={step !== 2}>
-                  Back
-                </button>
-                {perpetuations.length < 5 && (
-                  <button type="button" onClick={addPerpetuation} disabled={step !== 2 || (perpetuations.length > 0 && perpetuations[perpetuations.length - 1].text.trim() === "")}>
-                    Add another action
-                  </button>
-                )}
-                <Tooltip text="Attempt the prompt to proceed." isDisabled={step === 2 && (perpetuations.length > 0 && perpetuations[0].text.trim() === "")}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const cleanedItems = perpetuations.filter((p) => p.text.trim() !== "");
-                      setPerpetuations(cleanedItems.length > 0 ? cleanedItems : [{ id: 1, text: "" }]);
-                      setStep2Phase("selection");
-                    }}
-                    disabled={step !== 2 || (perpetuations.length > 0 && perpetuations[0].text.trim() === "")}
-                  >
-                    Next
-                  </button>
-                </Tooltip>
-              </div>
-              {ai.error && <AIErrorCard error={ai.error} onDismiss={ai.dismissResponse} />}
-              {ai.getCurrentResponse() && step === 2 && (
-                <AIResponseCard
-                  response={ai.getCurrentResponse()!}
-                  stage="perpetuation"
-                  onDismiss={ai.dismissResponse}
-                  onFeedback={ai.provideFeedback}
-                  canFollowUp={ai.canUseAI('perpetuation')}
-                />
-              )}
-            </>
-          ) : (
-            <>
-              <h1 ref={(el) => { headerRefs.current[2] = el; }}>What's your role?</h1>
-              <p className="step-description">Our problems rarely exist completely outside of ourselves. We often have a role to play. Try your best to be honest about yours. Click every action that you think might be actively contributing to the problem.</p>
-              <div className="form-content initial-form-content">
-                <div className="items-container">
-                  {perpetuations.map((perpetuation) => (
-                    <div
-                      key={perpetuation.id}
-                      className="deletable-item-container"
-                      onClick={() => handlePerpetuationSelection(perpetuation.id)}
-                      style={{ position: 'relative', cursor: 'pointer' }}
-                    >
-                      {selectedPerpetuations.includes(String(perpetuation.id)) && (
-                        <Check
-                          className="w-5 h-5 text-progress-complete"
-                          style={{
-                            position: 'absolute',
-                            left: '8px',
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                            zIndex: 1
-                          }}
-                        />
+                        </div>
                       )}
-                      <textarea
-                        value={perpetuation.text}
-                        readOnly={true}
-                        className={`auto-resizing-textarea read-only-textarea ${selectedPerpetuations.includes(String(perpetuation.id)) ? "selected" : ""}`}
-                        style={{
-                          paddingLeft: '40px',
-                          paddingRight: '40px',
-                          cursor: 'pointer'
-                        }}
-                        rows={1}
-                      />
-                      {/* Hidden checkbox for form functionality */}
-                      <input
-                        type="checkbox"
-                        checked={selectedPerpetuations.includes(String(perpetuation.id))}
-                        onChange={() => handlePerpetuationSelection(perpetuation.id)}
-                        style={{ display: 'none' }}
-                      />
                     </div>
                   ))}
-                  <div className="flex items-center mt-4">
-                    <input
-                      type="checkbox"
-                      id="none-of-the-above"
-                      checked={selectedPerpetuations.includes("none")}
-                      onChange={() => handlePerpetuationSelection("none")}
-                      disabled={step !== 2}
-                      className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 custom-checkbox"
+                </div>
+                <div className="ai-button-container mt-2">
+                  <div style={{ position: 'relative', zIndex: 10 }}>
+                    <AIAssistButton
+                      stage="perpetuation"
+                      customButtonText="Help me reflect on my potential role"
+                      isLoading={ai.loadingStage === 'perpetuation'}
+                      onRequest={() => ai.requestAssistance("perpetuation", perpetuations.map(p => p.text).join(', '), { painPoint, causes, perpetuations })}
+                      disabled={!ai.canUseAI('perpetuation') || !perpetuations.some(p => p.text.trim() !== "")}
+                      sessionId={sessionId}
+                      context={{ perpetuations }}
+                      currentStep={step}
+                      buttonStep={2}
                     />
-                    <label htmlFor="none-of-the-above" className="ml-2 block text-sm text-gray-900">
-                      None of these are actively contributing to the problem
-                    </label>
                   </div>
                 </div>
               </div>
-              <div className="button-container" style={{ marginTop: '1rem' }}>
-                <button type="button" onClick={() => setStep2Phase("input")} disabled={step !== 2}>
-                  Back
+            </div>
+            <div className="button-container" style={{ marginTop: '1rem' }}>
+              <button type="button" onClick={prevStep} disabled={step !== 2}>
+                Back
+              </button>
+              {perpetuations.length < 3 && (
+                <button type="button" onClick={addPerpetuation} disabled={step !== 2 || (perpetuations.length > 0 && perpetuations[perpetuations.length - 1].text.trim() === "")}>
+                  Add another contribution
                 </button>
-                <Tooltip text="Attempt the prompt to proceed." isDisabled={step === 2 && selectedPerpetuations.length === 0}>
-                  <button type="button" onClick={nextStep} disabled={step !== 2 || selectedPerpetuations.length === 0}>
-                    Next
-                  </button>
-                </Tooltip>
-              </div>
-            </>
-          )}
-        </div>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  // Clear perpetuations and skip this step
+                  setPerpetuations([{ id: 1, text: "" }]);
+                  setSelectedPerpetuations([]);
+                  nextStep();
+                }}
+                disabled={step !== 2}
+                className="skip-button"
+              >
+                I'm not sure / Skip for now
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  // Filter filled perpetuations and mark them as selected
+                  const filledPerpetuations = perpetuations.filter(p => p.text.trim() !== "");
+                  setPerpetuations(filledPerpetuations.length > 0 ? filledPerpetuations : [{ id: 1, text: "" }]);
+                  setSelectedPerpetuations(filledPerpetuations.map(p => String(p.id)));
+                  nextStep();
+                }}
+                disabled={step !== 2}
+              >
+                Next
+              </button>
+            </div>
+            {ai.error && <AIErrorCard error={ai.error} onDismiss={ai.dismissResponse} />}
+            {ai.getCurrentResponse() && step === 2 && (
+              <AIResponseCard
+                response={ai.getCurrentResponse()!}
+                stage="perpetuation"
+                onDismiss={ai.dismissResponse}
+                onFeedback={ai.provideFeedback}
+                canFollowUp={ai.canUseAI('perpetuation')}
+              />
+            )}
+          </div>
+        )}
 
         {/* Step 3: Solutions */}
         <div className={getStepClass(3)} ref={(el) => { stepRefs.current[3] = el; }}>
@@ -1361,156 +1517,311 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
           <div className="form-content initial-form-content">
             <div className="input-group">
               <label className="step-description">
-                Select a contributing cause and outline a potential action you could take to address it. For your contributions, outline a potential action that would prevent yourself from perpetuating the problem.
+                Click the 'Help me create an action plan' button for each cause you want to address below.
               </label>
-              <div className="items-container">
-                {actionableItems.filter(item => item.id.startsWith('cause')).map((item) => {
-                  const index = parseInt(item.id.split('-')[1], 10);
-                  if (!readOnlyCauseTextAreaRefs.current[index]) {
-                    readOnlyCauseTextAreaRefs.current[index] = [null, null];
-                  }
-                  return (
-                    <div key={item.id} className={`actionable-item-container ${highlightedContainerId === item.id ? "container-highlighted" : ""}`} style={{ marginBottom: '1rem', paddingTop: openActionBoxIds.includes(item.id) ? '0.5rem' : '0', paddingBottom: openActionBoxIds.includes(item.id) ? '1rem' : '0' }}>
-                      <div
-                        className="deletable-item-container selectable-item"
-                        onClick={() => handleSolutionSelection(item.id)}
-                      >
-                        <div className="cause-assumption-pair">
-                          <div className="cause-column">
-                            <label className="item-label" style={{ display: 'block', marginBottom: '4px' }}>Contributing Cause</label>
-                            <textarea
-                              ref={(el) => { readOnlyCauseTextAreaRefs.current[index][0] = el; }}
-                              value={item.cause}
-                              readOnly={true}
-                              className="auto-resizing-textarea read-only-textarea"
-                              rows={1}
-                            />
-                          </div>
-                          <div className="assumption-column">
-                            <label className="item-label" style={{ display: 'block', marginBottom: '4px' }}>Potential Assumption</label>
-                            <textarea
-                              ref={(el) => { readOnlyCauseTextAreaRefs.current[index][1] = el; }}
-                              value={item.assumption || ""}
-                              readOnly={true}
-                              className="auto-resizing-textarea read-only-textarea"
-                              rows={1}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      {openActionBoxIds.includes(item.id) && (
-                        <div className="action-textarea-container" style={{ padding: '0 0.5rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
-                            <label className="item-label" style={{ display: 'block', textAlign: 'center', margin: 0 }}>Possible Action</label>
-                            <button type="button" className="delete-item-button" style={{ top: '-4px' }} onClick={() => removeSolutionAction(item.id)} disabled={step !== 3}>
-                              &times;
-                            </button>
-                          </div>
-                          <textarea
-                            ref={el => { solutionTextareaRefs.current.set(item.id, el); }}
-                            value={solutions[item.id]}
-                            onChange={(e) => {
-                              handleSolutionActionChange(item.id, e.target.value);
-                              ai.clearResponseForStage('potential_actions');
-                            }}
-                            onInput={(e) => syncTextareaHeights(e)}
-                            className="auto-resizing-textarea"
-                            placeholder="Enter your action here"
-                            disabled={step !== 3}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {actionableItems.filter(item => item.id.startsWith('perp-')).length > 0 && (
-                  <div className="my-contributions-section">
-                    <label className="item-label" style={{ display: 'block', textAlign: 'center', marginBottom: '4px' }}>My Contributions</label>
-                    {actionableItems.filter(item => item.id.startsWith('perp-')).map((item) => (
-                      <div key={item.id} className={`actionable-item-container ${highlightedContainerId === item.id ? "container-highlighted" : ""}`} style={{ marginBottom: '1rem', paddingTop: openActionBoxIds.includes(item.id) ? '0.5rem' : '0', paddingBottom: openActionBoxIds.includes(item.id) ? '1rem' : '0' }}>
-                        <div style={{ padding: '0 0.5rem' }}>
-                          <textarea
-                            value={item.cause}
-                            readOnly={true}
-                            className="auto-resizing-textarea read-only-textarea"
-                            onInput={(e) => syncTextareaHeights(e)}
-                            onClick={() => handleSolutionSelection(item.id)}
-                            rows={1}
-                            style={{ cursor: 'pointer' }}
-                          />
-                        </div>
-                        {openActionBoxIds.includes(item.id) && (
-                          <div className="action-textarea-container" style={{ padding: '0 0.5rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
-                              <label className="item-label" style={{ display: 'block', textAlign: 'center', margin: 0 }}>Possible Action</label>
-                              <button type="button" className="delete-item-button" style={{ top: '-4px' }} onClick={() => removeSolutionAction(item.id)} disabled={step !== 3}>
-                                &times;
-                              </button>
+              
+              {/* Root Causes Section */}
+              {actionableItems.filter(item => !item.id.startsWith('perp-') && analyzedCauseIds.includes(item.id)).length > 0 && (
+                <>
+                  <h4 style={{ display: 'block', margin: '0.5rem 0 0.5rem 0', fontSize: '1.1rem', color: 'var(--text-primary)', textAlign: 'center', fontWeight: '600' }}>
+                    Root Causes
+                  </h4>
+                  <p style={{ display: 'block', margin: '0 0 0.5rem 0', fontSize: '0.875rem', color: 'var(--text-secondary)', textAlign: 'center', fontStyle: 'italic' }}>
+                    These causes have been validated by first principles analysis and are more likely to be the primary drivers of the issue.
+                  </p>
+                  <div className="items-container">
+                    {actionableItems.filter(item => !item.id.startsWith('perp-') && analyzedCauseIds.includes(item.id)).map((item) => {
+                      const isContribution = item.id.startsWith('perp-');
+                      const hasActions = solutions[item.id] && solutions[item.id].length > 0 && solutions[item.id].some(action => action.trim() !== '');
+                      
+                      return hasActions ? (
+                        <div key={item.id}>
+                          {/* Parent container with border when actions exist */}
+                          <div className="cause-action-container" style={{
+                            border: '1px solid var(--golden-mustard)',
+                            borderRadius: '12px',
+                            padding: '1rem',
+                            backgroundColor: 'var(--bg-primary)'
+                          }}>
+                            {/* Cause/Contribution Display */}
+                            <div className="deletable-item-container" style={{ marginBottom: '1rem' }}>
+                              <textarea
+                                className="auto-resizing-textarea"
+                                value={item.cause}
+                                readOnly
+                                style={{
+                                  background: 'var(--bg-secondary)',
+                                  cursor: 'default',
+                                  textAlign: 'center',
+                                  paddingLeft: '1.25em',
+                                  paddingRight: '1.25em'
+                                }}
+                              />
                             </div>
-                            <textarea
-                              ref={el => { solutionTextareaRefs.current.set(item.id, el); }}
-                              value={solutions[item.id]}
-                              onChange={(e) => {
-                                handleSolutionActionChange(item.id, e.target.value);
-                                ai.clearResponseForStage('potential_actions');
-                              }}
-                              onInput={(e) => syncTextareaHeights(e)}
-                              className="auto-resizing-textarea"
-                              placeholder="Enter your action here"
-                              disabled={step !== 3}
-                            />
+                            
+                            {/* Actions Section */}
+                            <div>
+                              <label className="item-label" style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                                Planned Action{solutions[item.id] && solutions[item.id].length > 1 ? 's' : ''}
+                              </label>
+                              {(solutions[item.id] || []).map((action, actionIndex) => (
+                                <div key={actionIndex} className="deletable-item-container" style={{ marginBottom: actionIndex < (solutions[item.id] || []).length - 1 ? '0.5rem' : '0' }}>
+                                  <textarea
+                                    ref={el => { solutionTextareaRefs.current.set(`${item.id}-${actionIndex}`, el); }}
+                                    value={action}
+                                    onChange={(e) => {
+                                      handleSolutionActionChange(item.id, actionIndex, e.target.value);
+                                      ai.clearResponseForStage('potential_actions');
+                                    }}
+                                    onInput={(e) => syncTextareaHeights(e)}
+                                    className="auto-resizing-textarea"
+                                    placeholder="Your planned action"
+                                    disabled={step !== 3}
+                                    style={{
+                                      background: 'var(--bg-secondary)',
+                                      borderColor: 'var(--refined-balance-teal)',
+                                      boxShadow: '0 0 0 1px var(--refined-balance-teal-light)',
+                                      textAlign: 'center',
+                                      paddingLeft: '1.25em',
+                                      paddingRight: '1.25em'
+                                    }}
+                                  />
+                                  <div className="delete-button-wrapper">
+                                    <button
+                                      type="button"
+                                      className="delete-item-button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeSolutionAction(item.id, actionIndex);
+                                      }}
+                                      disabled={step !== 3}
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                              
+                              {/* AI Assist Button - left aligned underneath the action text areas */}
+                              <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '0.75rem' }}>
+                                <div style={{ position: 'relative', zIndex: 10 }}>
+                                  <AIAssistButton
+                                    stage="action_planning"
+                                    customButtonText="Help me create an action plan"
+                                    isLoading={planningActionId === item.id}
+                                    onRequest={() => setPlanningActionId(item.id)}
+                                    disabled={step !== 3 || !item.cause.trim() || hasActions}
+                                    sessionId={sessionId}
+                                    context={{ cause: item.cause, isContribution: isContribution }}
+                                    currentStep={step}
+                                    buttonStep={3}
+                                    hasExistingAction={hasActions}
+                                  />
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    ))}
+                        </div>
+                      ) : (
+                        /* Structure matching Step 1 for consistent spacing */
+                        <div key={item.id} className="deletable-item-container">
+                          {/* Cause/Contribution Display */}
+                          <textarea
+                            className="auto-resizing-textarea"
+                            value={item.cause}
+                            readOnly
+                            style={{
+                              background: 'var(--bg-secondary)',
+                              cursor: 'default',
+                              textAlign: 'center',
+                              paddingLeft: '1.25em',
+                              paddingRight: '1.25em'
+                            }}
+                          />
+                          
+                          {/* Plan Action Button */}
+                          <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '0.5rem' }}>
+                            <div style={{ position: 'relative', zIndex: 10 }}>
+                              <AIAssistButton
+                                stage="action_planning"
+                                customButtonText="Help me create an action plan"
+                                isLoading={planningActionId === item.id}
+                                onRequest={() => setPlanningActionId(item.id)}
+                                disabled={step !== 3 || !item.cause.trim()}
+                                sessionId={sessionId}
+                                context={{ cause: item.cause, isContribution: isContribution }}
+                                currentStep={step}
+                                buttonStep={3}
+                                hasExistingAction={false}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
-              </div>
-              <div className="ai-button-container mt-2">
-            <AIAssistButton
-              stage="potential_actions"
-              isLoading={ai.loadingStage === 'potential_actions'}
-              onRequest={() => {
-                const draftedActions = Object.values(solutions).filter(action => action.trim() !== '').join('; ');
-                const selectedPerpetuationTexts = perpetuations
-                  .filter(p => selectedPerpetuations.includes(String(p.id)))
-                  .map(p => p.text)
-                  .join('; ');
-                ai.requestAssistance("potential_actions", draftedActions, {
-                  painPoint,
-                  causes: causes.map(c => c.cause).join('; '),
-                  solutions,
-                  perpetuations: selectedPerpetuationTexts
-                });
-              }}
-              disabled={Object.keys(solutions).length === 0 || !Object.values(solutions).some(action => action.trim() !== '') || !ai.canUseAI('potential_actions')}
-              sessionId={sessionId}
-              context={{ painPoint, causes, solutions, perpetuations: selectedPerpetuations }}
-              currentStep={step}
-              buttonStep={3}
-            />
-          </div>
+                </>
+              )}
+              
+              {/* Contributing Causes Section */}
+              {actionableItems.filter(item => item.id.startsWith('perp-') || !analyzedCauseIds.includes(item.id)).length > 0 && (
+                <>
+                  <h4 style={{ display: 'block', marginTop: '1.5rem', marginBottom: '0.5rem', fontSize: '1.1rem', color: 'var(--text-primary)', textAlign: 'center', fontWeight: '600' }}>
+                    Contributing Causes
+                 </h4>
+                 <p style={{ display: 'block', margin: '0 0 0.5rem 0', fontSize: '0.875rem', color: 'var(--text-secondary)', textAlign: 'center', fontStyle: 'italic' }}>
+                   These causes have not been validated by root cause analysis and are less likely to be the primary drivers of the issue.
+                 </p>
+                 <div className="items-container">
+                    {actionableItems.filter(item => item.id.startsWith('perp-') || !analyzedCauseIds.includes(item.id)).map((item) => {
+                      const isContribution = item.id.startsWith('perp-');
+                      const hasActions = solutions[item.id] && solutions[item.id].length > 0 && solutions[item.id].some(action => action.trim() !== '');
+                      
+                      return hasActions ? (
+                        <div key={item.id}>
+                          {/* Parent container with border when actions exist */}
+                          <div className="cause-action-container" style={{
+                            border: '1px solid var(--golden-mustard)',
+                            borderRadius: '12px',
+                            padding: '1rem',
+                            backgroundColor: 'var(--bg-primary)'
+                          }}>
+                            {/* Cause/Contribution Display */}
+                            <div className="deletable-item-container" style={{ marginBottom: '1rem' }}>
+                              <textarea
+                                className="auto-resizing-textarea"
+                                value={item.cause}
+                                readOnly
+                                style={{
+                                  background: 'var(--bg-secondary)',
+                                  cursor: 'default',
+                                  textAlign: 'center',
+                                  paddingLeft: '1.25em',
+                                  paddingRight: '1.25em'
+                                }}
+                              />
+                            </div>
+                            
+                            {/* Actions Section */}
+                            <div>
+                              <label className="item-label" style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                                Planned Action{solutions[item.id] && solutions[item.id].length > 1 ? 's' : ''}
+                              </label>
+                              {(solutions[item.id] || []).map((action, actionIndex) => (
+                                <div key={actionIndex} className="deletable-item-container" style={{ marginBottom: actionIndex < (solutions[item.id] || []).length - 1 ? '0.5rem' : '0' }}>
+                                  <textarea
+                                    ref={el => { solutionTextareaRefs.current.set(`${item.id}-${actionIndex}`, el); }}
+                                    value={action}
+                                    onChange={(e) => {
+                                      handleSolutionActionChange(item.id, actionIndex, e.target.value);
+                                      ai.clearResponseForStage('potential_actions');
+                                    }}
+                                    onInput={(e) => syncTextareaHeights(e)}
+                                    className="auto-resizing-textarea"
+                                    placeholder="Your planned action"
+                                    disabled={step !== 3}
+                                    style={{
+                                      background: 'var(--bg-secondary)',
+                                      borderColor: 'var(--refined-balance-teal)',
+                                      boxShadow: '0 0 0 1px var(--refined-balance-teal-light)',
+                                      textAlign: 'center',
+                                      paddingLeft: '1.25em',
+                                      paddingRight: '1.25em'
+                                    }}
+                                  />
+                                  <div className="delete-button-wrapper">
+                                    <button
+                                      type="button"
+                                      className="delete-item-button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeSolutionAction(item.id, actionIndex);
+                                      }}
+                                      disabled={step !== 3}
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                              
+                              {/* AI Assist Button - left aligned underneath the action text areas */}
+                              <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '0.75rem' }}>
+                                <div style={{ position: 'relative', zIndex: 10 }}>
+                                  <AIAssistButton
+                                    stage="action_planning"
+                                    customButtonText="Help me create an action plan"
+                                    isLoading={planningActionId === item.id}
+                                    onRequest={() => setPlanningActionId(item.id)}
+                                    disabled={step !== 3 || !item.cause.trim() || hasActions}
+                                    sessionId={sessionId}
+                                    context={{ cause: item.cause, isContribution: isContribution }}
+                                    currentStep={step}
+                                    buttonStep={3}
+                                    hasExistingAction={hasActions}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Structure matching Step 1 for consistent spacing */
+                        <div key={item.id} className="deletable-item-container">
+                          {/* Cause/Contribution Display */}
+                          <textarea
+                            className="auto-resizing-textarea"
+                            value={item.cause}
+                            readOnly
+                            style={{
+                              background: 'var(--bg-secondary)',
+                              cursor: 'default',
+                              textAlign: 'center',
+                              paddingLeft: '1.25em',
+                              paddingRight: '1.25em'
+                            }}
+                          />
+                          
+                          {/* Plan Action Button */}
+                          <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '0.5rem' }}>
+                            <div style={{ position: 'relative', zIndex: 10 }}>
+                              <AIAssistButton
+                                stage="action_planning"
+                                customButtonText="Help me create an action plan"
+                                isLoading={planningActionId === item.id}
+                                onRequest={() => setPlanningActionId(item.id)}
+                                disabled={step !== 3 || !item.cause.trim()}
+                                sessionId={sessionId}
+                                context={{ cause: item.cause, isContribution: isContribution }}
+                                currentStep={step}
+                                buttonStep={3}
+                                hasExistingAction={false}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
           </div>
           <div className="button-container" style={{ marginTop: '1rem' }}>
             <button type="button" onClick={prevStep} disabled={step !== 3}>
               Back
             </button>
-            <Tooltip text="Attempt the prompt to proceed." isDisabled={step === 3 && (Object.keys(solutions).length === 0 || !Object.values(solutions).some((action) => action.trim() !== ""))}>
+            <Tooltip text="Use AI guidance to plan at least one action to proceed." isDisabled={step === 3 && Object.values(solutions).some((actions) => actions.some(action => action.trim() !== ""))}>
               <button type="button" onClick={() => {
                 // Filter out empty solutions before proceeding
                 const filteredSolutions = Object.fromEntries(
-                  Object.entries(solutions).filter(([_, action]) => action.trim() !== "")
+                  Object.entries(solutions)
+                    .map(([id, actions]) => [id, actions.filter(action => action.trim() !== "")])
+                    .filter(([_, actions]) => (actions as string[]).length > 0)
                 );
                 setSolutions(filteredSolutions);
-                
-                // Keep action boxes open only for solutions that have content
-                setOpenActionBoxIds(prev =>
-                  prev.filter(id => solutions[id] && solutions[id].trim() !== "")
-                );
-                
                 nextStep();
-              }} disabled={step !== 3 || Object.keys(solutions).length === 0 || !Object.values(solutions).some((action) => action.trim() !== "")}>
+              }} disabled={step !== 3 || !Object.values(solutions).some((actions) => actions.some(action => action.trim() !== ""))}>
                 Next
               </button>
             </Tooltip>
@@ -1533,7 +1844,9 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
           <p className="step-description">Select each action that you're hesitant about taking, then complete the fear, mitigation, and contingency prompts to build your confidence.</p>
           <div className="form-content initial-form-content">
             <div className="items-container">
-              {Object.entries(solutions).map(([id, action]) => (
+              {Object.entries(solutions).flatMap(([id, actions]) =>
+                actions.map((action, index) => ({ id: `${id}-${index}`, action }))
+              ).map(({ id, action }) => (
                 <div key={id} className="actionable-item-container">
                   <div
                     className={`selectable-box ${openFearSections.includes(id) ? "selected" : ""}`}
@@ -1620,7 +1933,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                 stage="action_planning"
                 isLoading={ai.loadingStage === 'action_planning'}
                 onRequest={() => {
-                  ai.requestAssistance("action_planning", Object.values(solutions).join(', '), { painPoint, causes, perpetuations: selectedPerpetuations, solutions, fears });
+                  ai.requestAssistance("action_planning", Object.values(solutions).flat().join(', '), { painPoint, causes, perpetuations: selectedPerpetuations, solutions, fears });
                 }}
                 disabled={(Object.keys(fears).length === 0 && !notWorried) || !ai.canUseAI('action_planning')}
                 sessionId={sessionId}
@@ -1663,7 +1976,9 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
             <div className="input-group">
               <label className="step-description mb-4">The most important step is always the next one. Choose yours.</label>
               <div className="items-container">
-                {Object.entries(solutions).map(([id, action]) => (
+                {Object.entries(solutions).flatMap(([id, actions]) =>
+                  actions.map((action, index) => ({ id: `${id}-${index}`, action }))
+                ).map(({ id, action }) => (
                   <div key={id} className="actionable-item-container">
                     <div
                       className={`selectable-box ${actionPlan.selectedActionIds.includes(id) ? "selected" : ""}`}
@@ -1705,6 +2020,9 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
                     placeholder="None of the above, I'd rather..."
                     disabled={step !== 5}
                     style={{
+                      textAlign: 'center',
+                      paddingLeft: '1.25em',
+                      paddingRight: '1.25em',
                       opacity: actionPlan.selectedActionIds.includes("other") || actionPlan.otherActionText.trim() === "" ? 1 : 0.5
                     }}
                   />
@@ -1841,6 +2159,249 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
           </div>
         </div>
       )}
+
+      {/* Cause Exchange Modal */}
+      {showCauseExchangeModal && pendingSelections && (
+        <div className="modal-overlay" onClick={() => setShowCauseExchangeModal(false)}>
+          <div className="modal-content cause-exchange-modal" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowCauseExchangeModal(false)} className="modal-close-button">
+            </button>
+            
+            <div className="cause-exchange-header">
+              <h2>You've reached the 5-cause limit</h2>
+              <p>To add your {pendingSelections.selections.length} new selection(s), please choose which of your current causes you'd like to replace:</p>
+            </div>
+
+            <div className="cause-exchange-content">
+              <div className="new-selections-section">
+                <h3>Your New Selections:</h3>
+                <div className="new-selections-list">
+                  {pendingSelections.selections.map((selection, index) => (
+                    <div key={index} className="new-selection-item">
+                      <div className="selection-indicator">{index + 1}</div>
+                      <div className="selection-text">{selection}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="existing-causes-section">
+                <h3>Select {pendingSelections.selections.length - 1} cause(s) to replace:</h3>
+                <div className="existing-causes-list">
+                  {causes
+                    .filter(c => c.cause.trim() !== '' && c.id !== pendingSelections.analyzingCauseId)
+                    .map((cause) => (
+                      <div
+                        key={cause.id}
+                        className={`existing-cause-item ${selectedCausesToReplace.includes(cause.cause) ? 'selected' : ''}`}
+                        onClick={() => {
+                          const needed = pendingSelections.selections.length - 1;
+                          const current = selectedCausesToReplace.length;
+                          
+                          if (selectedCausesToReplace.includes(cause.cause)) {
+                            setSelectedCausesToReplace(prev => prev.filter(c => c !== cause.cause));
+                          } else if (current < needed) {
+                            setSelectedCausesToReplace(prev => [...prev, cause.cause]);
+                          }
+                        }}
+                        style={{
+                          cursor: selectedCausesToReplace.includes(cause.cause) ||
+                                  selectedCausesToReplace.length < pendingSelections.selections.length - 1
+                                  ? 'pointer' : 'not-allowed',
+                          opacity: selectedCausesToReplace.includes(cause.cause) ||
+                                   selectedCausesToReplace.length < pendingSelections.selections.length - 1
+                                   ? 1 : 0.5
+                        }}
+                      >
+                        <div className="cause-text">{cause.cause}</div>
+                        {selectedCausesToReplace.includes(cause.cause) && (
+                          <div className="selection-indicator selected">✓</div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="cause-exchange-actions">
+              <button
+                onClick={() => setShowCauseExchangeModal(false)}
+                className="cancel-button secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleCauseExchange(selectedCausesToReplace)}
+                disabled={selectedCausesToReplace.length !== pendingSelections.selections.length - 1}
+                className="confirm-button primary"
+              >
+                Replace Causes
+              </button>
+            </div>
+
+            <style jsx>{`
+              .cause-exchange-modal {
+                max-width: 600px;
+                max-height: 80vh;
+                overflow-y: auto;
+              }
+
+              .cause-exchange-header {
+                text-align: center;
+                margin-bottom: 1.5rem;
+                padding-bottom: 1rem;
+                border-bottom: 1px solid var(--border-medium);
+              }
+
+              .cause-exchange-header h2 {
+                margin: 0 0 0.5rem 0;
+                color: var(--text-primary);
+                font-size: 1.5rem;
+              }
+
+              .cause-exchange-header p {
+                margin: 0;
+                color: var(--text-secondary);
+                font-size: 0.95rem;
+              }
+
+              .cause-exchange-content {
+                display: flex;
+                flex-direction: column;
+                gap: 1.5rem;
+              }
+
+              .new-selections-section,
+              .existing-causes-section {
+                background: var(--bg-secondary);
+                border-radius: 12px;
+                padding: 1rem;
+              }
+
+              .new-selections-section h3,
+              .existing-causes-section h3 {
+                margin: 0 0 1rem 0;
+                font-size: 1.1rem;
+                color: var(--refined-balance-teal);
+              }
+
+              .new-selections-list,
+              .existing-causes-list {
+                display: flex;
+                flex-direction: column;
+                gap: 0.75rem;
+              }
+
+              .new-selection-item {
+                display: flex;
+                align-items: flex-start;
+                gap: 0.75rem;
+                padding: 0.75rem;
+                background: var(--refined-balance-teal-light);
+                border: 1px solid var(--refined-balance-teal);
+                border-radius: 8px;
+              }
+
+              .existing-cause-item {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 0.75rem;
+                background: var(--bg-primary);
+                border: 1px solid var(--border-medium);
+                border-radius: 8px;
+                transition: all 0.2s ease;
+                position: relative;
+              }
+
+              .existing-cause-item:hover:not([style*="not-allowed"]) {
+                border-color: var(--golden-mustard);
+                background: var(--golden-mustard-focus);
+                transform: translateY(-1px);
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+              }
+
+              .existing-cause-item.selected {
+                border-color: var(--refined-balance-teal);
+                background: var(--refined-balance-teal-light);
+              }
+
+              .selection-indicator {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 24px;
+                height: 24px;
+                border-radius: 50%;
+                background: var(--refined-balance-teal);
+                color: white;
+                font-size: 0.8rem;
+                font-weight: bold;
+                flex-shrink: 0;
+              }
+
+              .selection-indicator.selected {
+                background: var(--refined-balance-teal);
+                color: white;
+              }
+
+              .selection-text,
+              .cause-text {
+                flex: 1;
+                font-size: 0.9rem;
+                line-height: 1.4;
+                color: var(--text-primary);
+              }
+
+              .cause-exchange-actions {
+                display: flex;
+                justify-content: space-between;
+                gap: 1rem;
+                margin-top: 1.5rem;
+                padding-top: 1rem;
+                border-top: 1px solid var(--border-medium);
+              }
+
+              .cancel-button,
+              .confirm-button {
+                padding: 0.75rem 1.5rem;
+                border-radius: 8px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+              }
+
+              .cancel-button {
+                background: var(--bg-secondary);
+                border: 1px solid var(--border-medium);
+                color: var(--text-secondary);
+              }
+
+              .cancel-button:hover {
+                background: var(--bg-tertiary);
+                color: var(--text-primary);
+              }
+
+              .confirm-button {
+                background: var(--refined-balance-teal);
+                border: 1px solid var(--refined-balance-teal);
+                color: white;
+              }
+
+              .confirm-button:hover:not(:disabled) {
+                background: var(--refined-balance-teal-dark);
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(65, 173, 176, 0.3);
+              }
+
+              .confirm-button:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+              }
+            `}</style>
+          </div>
+        </div>
+      )}
       
     </main>
     </>
@@ -1850,9 +2411,16 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>, index?: nu
 export default function SessionWizard() {
   const [sessionId, setSessionId] = useState<string>("");
   
-  // Initialize session ID
+  // Initialize session ID - generate a valid ObjectId format for backend compatibility
   useEffect(() => {
-    setSessionId(`session_${Date.now()}`);
+    // Generate a 24-character hex string (valid ObjectId format)
+    const generateObjectId = () => {
+      const timestamp = Math.floor(Date.now() / 1000).toString(16).padStart(8, '0');
+      const randomHex = Array.from({length: 16}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      return timestamp + randomHex;
+    };
+    
+    setSessionId(generateObjectId());
   }, []);
 
   const logAIInteraction = (stage: string, userInputBefore: string, aiResponse: string) => {

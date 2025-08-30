@@ -21,7 +21,11 @@ After the very first response of a session, you MUST NOT refer to yourself, your
 
 You will be given context in placeholders like {{placeholder}}. You must use the information inside these placeholders to inform your response, but you must NEVER include the placeholder syntax (e.g., '{{placeholder}}') in your final response.
 
-CRITICAL RULE: When you reference any information provided by the user from a placeholder (e.g., {{painPoint}}, {{userInput}}, {{causes}}), you must NEVER summarize or rephrase it as an introductory sentence. Instead, incorporate your understanding of their input directly into your analytical bullet points. NEVER repeat the user's input verbatim or quote it directly. Always demonstrate that you understand their input by restating it in a fresh, concise way within your analysis.
+CRITICAL RULE FOR QUESTION GENERATION: Your primary goal is to guide the user to a root cause by asking concise, insightful questions. Each question must be a direct follow-up to the user's last response, demonstrating that you are listening. To do this, analyze their response for emerging patterns, key details, or underlying beliefs. Then, ask a brief, targeted question that hones in on the most revealing insight to explore the "why" behind it.
+
+For this task, a "revealing insight" is defined as a statement that most likely points to a deeper, underlying driver of the user's problem. This could be a core belief, an unmet need, a significant emotional trigger, or a foundational assumption. Your question should be designed to test if that insight is, in fact, a true root cause.
+
+Your question must not summarize their response, but rather use a specific detail from it to move the conversation to a deeper level.
 
 You should format your responses using Markdown. Use paragraphs for separation and lists (numbered or bulleted) where appropriate. For bulleted lists, always use the standard markdown syntax with "- " (dash followed by space) at the beginning of each bullet point. Add extra line breaks after each bullet point to improve readability."""
 
@@ -242,11 +246,109 @@ In this section, provide a concluding paragraph that summarizes the path forward
         }
     },
     
+    "conversational_cause_analysis": {
+        "openers": {
+            "behavior": "What does this behavior do for you? What need does it meet or feeling does it provide?",
+            "belief": "What experiences or observations have led you to this conclusion?",
+            "external": "What aspects of this situation are within your influence to change?"
+        },
+        "follow_ups": {
+            "obstacle": "What makes it hard to choose differently in the moment?",
+            "trigger": "When are you most likely to do this?",
+            "falsifier": "What could you see that would make you change your mind?"
+        },
+        "depth_pass": "Why do you think that need/feeling exists?",
+        "summary_prompt": """Based on the following conversation about a user's cause, generate 3-4 potential root cause statements that capture the deeper insights revealed through the dialogue.
+
+Each root cause option should:
+- Be a complete, actionable statement (not a question)
+- Reflect the underlying "why" behind the surface-level cause
+- Be distinct from the others
+- Be written in first person from the user's perspective
+
+Example format: "I use alcohol as a reward because I don't have other ways to celebrate small wins" or "I avoid difficult conversations because I believe conflict will damage relationships"
+
+Return your response as valid JSON in this exact format:
+{
+  "root_cause_options": [
+    "First root cause statement here",
+    "Second root cause statement here",
+    "Third root cause statement here",
+    "Fourth root cause statement here"
+  ]
+}""",
+        "dynamic_prompt": """
+You are a conversational AI helping a user with root cause analysis. Your goal is to ask a single, clear, and straightforward question that helps the user dig deeper into the root cause of their problem.
+
+Based on the user's stated cause and the conversation history, determine the next logical question to ask. The conversation should follow this pattern:
+
+1.  **Opener:** Ask a question to understand the payoff, evidence, or control.
+2.  **Follow-up:** Ask a question to understand the obstacle, trigger, or a different perspective.
+3.  **Depth Pass:** Ask a "why" question to get to the core of the issue.
+
+Do not ask solution-oriented questions. Focus on understanding the "why" behind the user's stated cause.
+
+Return your response as a JSON object with the key 'question'.
+"""
+    },
+    
+    "conversational_action_planning": {
+        "openers": {
+            "feasibility": "What would you realistically need (time, resources, support) to make this happen?",
+            "specificity": "What would this look like in practice? What exactly would you do?",
+            "measurement": "How would you know if this action is working? What would success look like?"
+        },
+        "follow_ups": {
+            "obstacles": "What might get in the way of doing this consistently?",
+            "timing": "When would be the best time to start this? What would trigger you to take action?",
+            "support": "Who or what could help you stay accountable to this?"
+        },
+        "depth_pass": "Why do you think this approach would be effective for addressing this cause?",
+        "summary_prompt": """Based on the following conversation about action planning for a user's cause, generate 3-4 specific, actionable plan options.
+
+Each action plan option should:
+- Be concrete and specific (not vague)
+- Include clear steps or implementation details
+- Be realistic given the user's context and responses
+- Directly address the underlying cause
+- Be written as actionable statements
+
+Example format: "Set a 25-minute timer each morning at 9 AM and work on your most important task before checking email" or "Create a implementation intention: When I feel the urge to procrastinate, I will immediately do one small 5-minute task related to my goal"
+
+Return your response as valid JSON in this exact format:
+{
+  "action_plan_options": [
+    "First specific action plan here",
+    "Second specific action plan here",
+    "Third specific action plan here",
+    "Fourth specific action plan here"
+  ]
+}""",
+        "dynamic_prompt": """
+You are a conversational AI helping a user plan specific actions to address a cause of their problem. Your goal is to ask a single, clear question that helps the user think through the practical details of taking action.
+
+Based on the user's cause and the conversation history, determine the next logical question to ask. The conversation should follow this pattern:
+
+1. **Opener:** Ask about feasibility, specificity, or measurement
+2. **Follow-up:** Ask about obstacles, timing, or support needs
+3. **Depth Pass:** Ask why they think this approach would be effective
+
+Focus on helping the user develop concrete, realistic action plans. Ask questions that help them think through implementation details, not just high-level intentions.
+
+Return your response as a JSON object with the key 'question'.
+"""
+    },
+    
     "session_summary": """You worked through a problem described in '{{painPoint}}' with causes described in '{{causes}}', assumptions described in '{{assumptions}}', perpetuations described in '{{perpetuations}}', solutions described in '{{solutions}}', fears described in '{{fears}}', and selected action described in '{{actionPlan}}'.
 
 {{aiInteractionAnalysis}}
 
 Provide a comprehensive summary in JSON format. IMPORTANT: The tone of the summary should be personal and encouraging. Use 'you' and 'your' to refer to the user, and avoid using 'the user'.
+
+CRITICAL INSTRUCTIONS FOR ACTION PLAN:
+1. PRIMARY FOCUS: Analyze the entire session to identify the most impactful actions that address the fundamental root causes. The action plan should be strategic and solution-oriented.
+2. ASSUMPTION VALIDATION: Only integrate assumption validation steps if a proposed action depends on a critical, unvalidated assumption that could make or break its success. Most action plans may not need explicit validation steps.
+3. BALANCE: The action plan should primarily focus on forward momentum and problem-solving, with assumption validation serving as a targeted support mechanism only when necessary.
 
 The JSON structure should be as follows:
 
@@ -259,10 +361,11 @@ The JSON structure should be as follows:
     "Insight 3: A third insight if warranted"
   ],
   "action_plan": {
-    "primary_action": "The most important next step for you to take",
+    "primary_action": "The most impactful next step to address fundamental root causes (conditionally include assumption validation only if critical)",
     "supporting_actions": [
-      "Additional action 1",
-      "Additional action 2"
+      "Additional strategic action 1 (may include assumption validation if needed)",
+      "Additional strategic action 2 (may include assumption validation if needed)",
+      "Additional strategic action 3 if warranted"
     ],
     "timeline": "Suggested timeframe for implementation"
   },
@@ -517,6 +620,653 @@ async def log_ai_interaction(interaction_data: Dict[str, Any]) -> str:
     
     return str(result.inserted_id)
 
+def classify_cause(cause_text: str) -> str:
+    """
+    Classifies a cause into 'behavior', 'belief', or 'external'.
+    """
+    lower_text = cause_text.lower()
+    
+    # Behavior patterns - actions the user takes
+    behavior_patterns = [
+        'i ', 'when i', 'after i', 'before i', 'while i', 'as i',
+        'i tend to', 'i always', 'i usually', 'i often', 'i sometimes',
+        'i do', 'i go', 'i say', 'i choose', 'i decide', 'i react',
+        'i scroll', 'i snack', 'i drink', 'i smoke', 'i eat', 'i watch',
+        'i work', 'i procrastinate', 'i avoid', 'i delay', 'i rush'
+    ]
+    
+    # Belief/thought patterns
+    belief_patterns = [
+        'i think', 'i believe', 'i feel like', 'i assume',
+        'i\'m not good', 'i\'m bad at', 'i can\'t', 'i\'m unable',
+        'people think', 'others believe', 'everyone expects',
+        'it\'s impossible', 'it\'s too hard', 'it\'s not worth'
+    ]
+    
+    # External/situational factors
+    external_patterns = [
+        'my boss', 'my manager', 'my coworker', 'my partner', 'my family',
+        'the weather', 'the economy', 'the system', 'the environment',
+        'there isn\'t time', 'there\'s no', 'the schedule', 'work demands'
+    ]
+
+    # Check for behavior patterns first (most specific)
+    if any(pattern in lower_text for pattern in behavior_patterns):
+        return 'behavior'
+        
+    # Check for belief patterns
+    if any(pattern in lower_text for pattern in belief_patterns):
+        return 'belief'
+        
+    # Check for external patterns
+    if any(pattern in lower_text for pattern in external_patterns):
+        return 'external'
+
+    # Default to behavior if it starts with "I" in any form
+    if lower_text.startswith(('i ', 'when i', 'after i', 'before i')):
+        return 'behavior'
+    
+    # Final fallback
+    return 'belief'
+
+def detect_loop_and_summarize(history: List[str]) -> Optional[str]:
+    """
+    Detects loops in the conversation and returns a summary if a loop is found.
+    """
+    if len(history) < 2:
+        return None
+
+    # Simple loop detection: check for repeated phrases
+    last_response = history[-1].lower()
+    for i in range(len(history) - 1):
+        if last_response in history[i].lower() or history[i].lower() in last_response:
+            summary = "It looks like we've uncovered a key theme. Here's the chain of reasoning:\n"
+            for i, item in enumerate(history):
+                summary += f"\nWhy #{i+1}: {item}"
+            return summary
+            
+    return None
+
+def detect_user_uncertainty(response: str) -> bool:
+    """
+    Detects if a user response indicates uncertainty or being stuck.
+    """
+    if not response or not response.strip():
+        return True
+    
+    response_lower = response.lower().strip()
+    
+    # Common uncertainty indicators
+    uncertainty_phrases = [
+        "i'm not sure", "im not sure", "not sure", "don't know", "dont know",
+        "no idea", "i don't know", "i dont know", "unsure", "skip", "pass",
+        "i guess", "maybe", "i think maybe", "not really sure", "hard to say",
+        "i'm stuck", "im stuck", "can't think", "cant think", "no clue"
+    ]
+    
+    # Check for direct matches
+    if any(phrase in response_lower for phrase in uncertainty_phrases):
+        return True
+    
+    # Check for very short responses that might indicate uncertainty
+    if len(response.strip().split()) <= 3 and any(word in response_lower for word in ["maybe", "sure", "guess"]):
+        return True
+    
+    return False
+
+async def get_next_cause_analysis_question(cause: str, history: List[str], pain_point: str, regenerate: bool = False) -> Dict[str, Any]:
+    """
+    Determines the next question in the adaptive conversational cause analysis.
+    Uses the Root Cause Litmus Test with 2-5 question guardrails.
+    Enhanced to handle user uncertainty by asking different types of questions or advancing to completion.
+    """
+    prompts = PROMPTS['conversational_cause_analysis']
+    question_count = len(history) // 2  # Number of completed Q&A pairs
+    
+    # Enforce minimum 3 questions before allowing completion
+    min_questions = 3
+    max_questions = 5
+    
+    # Count uncertain responses in the conversation
+    uncertain_count = 0
+    if len(history) > 0:
+        # Check user responses (odd indices: 1, 3, 5, etc.)
+        for i in range(1, len(history), 2):
+            if detect_user_uncertainty(history[i]):
+                uncertain_count += 1
+    
+    # If user has been uncertain multiple times and we have minimum questions, advance to completion
+    if uncertain_count >= 2 and question_count >= min_questions:
+        print(f"Advancing to completion due to user uncertainty (uncertain responses: {uncertain_count})")
+        # Generate root causes based on available information
+        summary_prompt = prompts['summary_prompt'] + f"""
+
+Pain Point: {pain_point}
+Cause: {cause}
+Conversation History: {history}
+
+The user has expressed uncertainty multiple times. Generate 4 diverse root cause statements that explore different possibilities for why this cause might exist, even with limited specific information from the conversation."""
+        
+        root_cause_options = []
+        try:
+            summary_response = await get_claude_response(summary_prompt)
+            summary_data = json.loads(summary_response['responseText'])
+            root_cause_options = summary_data.get("root_cause_options", [])
+            print(f"Generated root causes due to uncertainty: {root_cause_options}")
+            
+        except (json.JSONDecodeError, Exception) as e:
+            print(f"Root cause generation failed due to uncertainty: {e}")
+            root_cause_options = [
+                f"I haven't fully explored what drives '{cause}' yet, but it might be a deeper need I'm not addressing",
+                f"There could be beliefs or assumptions behind '{cause}' that I haven't identified",
+                f"'{cause}' might be a pattern that serves a purpose I'm not aware of",
+                f"External factors might be influencing '{cause}' in ways I haven't recognized"
+            ]
+        
+        return {"root_cause_options": root_cause_options, "is_complete": True}
+    
+    # If we've asked the maximum questions OR user explicitly requested regeneration, generate root causes
+    if question_count >= max_questions or (regenerate and question_count >= min_questions):
+        # Enhanced summary prompt for better root cause generation
+        summary_prompt = prompts['summary_prompt'] + f"""
+
+Pain Point: {pain_point}
+Cause: {cause}
+Conversation History: {history}
+
+Generate 4 diverse root cause statements that dig deeper than the surface-level cause. Each should offer a different perspective on why this cause exists."""
+        
+        root_cause_options = []
+        try:
+            summary_response = await get_claude_response(summary_prompt)
+            summary_data = json.loads(summary_response['responseText'])
+            root_cause_options = summary_data.get("root_cause_options", [])
+            print(f"AI generated {len(root_cause_options)} root cause options: {root_cause_options}")
+            
+        except json.JSONDecodeError as e:
+            print(f"JSON parsing failed for root cause options: {e}")
+        except Exception as e:
+            print(f"AI response failed for root cause options: {e}")
+            
+        # If AI didn't generate valid options, use fallback
+        if not root_cause_options or len(root_cause_options) == 0:
+            print("Using fallback root cause options")
+            root_cause_options = [
+                f"The underlying need behind '{cause}' isn't being met in healthier ways",
+                f"I have beliefs or assumptions that make '{cause}' feel necessary",
+                f"There are environmental or situational factors that trigger '{cause}'",
+                f"I lack the skills, resources, or support to handle this differently"
+            ]
+            
+        print(f"Final root cause options being returned: {root_cause_options}")
+        return {"root_cause_options": root_cause_options, "is_complete": True}
+
+    # If we have at least the minimum questions, evaluate if the latest response is deep enough
+    if question_count >= min_questions and len(history) > 0:
+        # Get the latest user response
+        latest_response = history[-1] if len(history) % 2 == 1 else history[-2]
+        
+        # Evaluate the depth of the response
+        evaluation = await evaluate_root_cause_depth(cause, latest_response)
+        
+        # Only end the analysis if we meet strict criteria OR if we've reached the maximum questions
+        should_complete = False
+        
+        # Implement dynamic threshold based on question count
+        total_score = evaluation.get("total_score", 0)
+        
+        # Dynamic threshold: increases with more questions to maintain quality
+        if question_count >= 4:
+            min_score_threshold = 5  # After 4 questions, require higher quality (5/6)
+        else:  # question_count == 3 (since min_questions = 3)
+            min_score_threshold = 4  # After 3 questions, require solid insights (4/6)
+        
+        if evaluation.get("success", False) and total_score >= min_score_threshold:
+            # AI evaluation succeeded AND score is high enough for a true root cause
+            should_complete = True
+            print(f"Root cause detected after {question_count} questions with score {total_score} (threshold: {min_score_threshold}). Generating options...")
+        elif question_count >= max_questions:
+            # We've reached maximum questions, complete regardless of evaluation
+            should_complete = True
+            print(f"Maximum questions ({max_questions}) reached. Generating options...")
+        else:
+            # Continue asking questions - either evaluation failed or score not high enough
+            if not evaluation.get("success", False):
+                print(f"Evaluation failed after {question_count} questions. Continuing analysis...")
+            else:
+                print(f"Score too low after {question_count} questions (score: {total_score}/{min_score_threshold}). Continuing analysis...")
+        
+        if should_complete:
+            # Use the same summary generation as above
+            summary_prompt = prompts['summary_prompt'] + f"""
+
+Pain Point: {pain_point}
+Cause: {cause}
+Conversation History: {history}
+
+Generate 4 diverse root cause statements that dig deeper than the surface-level cause. Each should offer a different perspective on why this cause exists."""
+            
+            root_cause_options = []
+            try:
+                summary_response = await get_claude_response(summary_prompt)
+                summary_data = json.loads(summary_response['responseText'])
+                root_cause_options = summary_data.get("root_cause_options", [])
+                
+            except (json.JSONDecodeError, Exception) as e:
+                print(f"Root cause generation failed: {e}")
+                root_cause_options = [
+                    f"The underlying need behind '{cause}' isn't being met in healthier ways",
+                    f"I have beliefs or assumptions that make '{cause}' feel necessary",
+                    f"There are environmental or situational factors that trigger '{cause}'",
+                    f"I lack the skills, resources, or support to handle this differently"
+                ]
+            
+            return {"root_cause_options": root_cause_options, "is_complete": True}
+
+    # Generate the next question based on evaluation or question count
+    if question_count == 0:
+        # First question - use dynamic AI generation based on cause classification
+        cause_type = classify_cause(cause)
+        
+        # Create dynamic prompt for first question
+        first_question_prompt = f"""You are an AI assistant helping a user start a root cause analysis conversation. Your goal is to generate a single, personalized opening question based on their stated cause.
+
+**User's Stated Cause:** "{cause}"
+**Focus Area for Your Question:** "{cause_type}"
+
+**Tone and Style Guide:**
+- **Be Direct and Clear:** The question should be straightforward and easy to understand. Get straight to the point without unnecessary introductory phrases.
+- **Use Natural Language:** Frame the question using simple, everyday language. Avoid academic, clinical, or robotic phrasing.
+- **Be Relevant:** The question must be a direct and obvious follow-up to the user's stated cause, showing you have understood their specific situation.
+
+**Focus Area Guidance:**
+- If focus area is "behavior": Ask about what happens in the moment before/during the behavior, what triggers it, or what it feels like
+- If focus area is "belief": Ask about specific experiences that formed this belief or what evidence supports it
+- If focus area is "external": Ask for concrete examples or what specifically makes this external factor problematic
+
+Generate only a single, direct question. Do not include any other text, explanations, or formatting."""
+
+        try:
+            ai_result = await get_claude_response(first_question_prompt)
+            next_question = ai_result['responseText'].strip()
+            print(f"DEBUG: Generated dynamic first question: {next_question}")
+        except Exception as e:
+            print(f"DEBUG: Error generating dynamic first question: {e}")
+            # Fallback to simplified static questions if AI fails
+            fallback_questions = {
+                "behavior": "What's happening in the moment you do this?",
+                "belief": "What experiences led you to this belief?",
+                "external": "Can you give me a specific example of this?"
+            }
+            next_question = fallback_questions.get(cause_type, "Can you tell me more about this?")
+            
+    else:
+        # Subsequent questions - use adaptive questioning based on latest response
+        # History format: [AI_q1, User_a1, AI_q2, User_a2, ...]
+        # So user responses are at odd indices (1, 3, 5, etc.)
+        latest_response = ""
+        if len(history) > 0:
+            # Get the last user response (should be at the end for subsequent questions)
+            if len(history) % 2 == 0:  # Even length means last item is user response
+                latest_response = history[-1]
+            elif len(history) > 1:  # Odd length means second-to-last is user response
+                latest_response = history[-2]
+        
+        if latest_response:
+            print(f"DEBUG: Latest response: {latest_response}")
+            
+            # Check if user is showing uncertainty
+            is_uncertain = detect_user_uncertainty(latest_response)
+            
+            if is_uncertain and question_count > 0:
+                print(f"DEBUG: User uncertainty detected, generating AI-powered alternative question")
+                # Use AI to generate a contextual alternative question based on their response
+                uncertainty_prompt = f"""The user is expressing uncertainty about the cause: "{cause}"
+
+Their uncertain response was: "{latest_response}"
+
+Generate a single, empathetic follow-up question that:
+- Acknowledges their uncertainty without judgment
+- Offers a different angle or perspective to explore the cause
+- Incorporates their specific situation and response
+- Helps them think about the cause in a new way
+- Is conversational and supportive
+
+Return only the question text, no other formatting."""
+
+                try:
+                    uncertainty_result = await get_claude_response(uncertainty_prompt)
+                    next_question = uncertainty_result['responseText'].strip()
+                    print(f"DEBUG: Generated uncertainty question: {next_question}")
+                except Exception as e:
+                    print(f"DEBUG: Error generating uncertainty question: {e}")
+                    # Fallback to contextual alternatives if AI fails
+                    alternative_questions = [
+                        f"What if we approached '{cause}' from a different angle - when do you NOT experience this issue?",
+                        f"Instead of focusing on why '{cause}' happens, what would need to change for it to completely disappear?",
+                        f"If someone you trust had the same experience with '{cause}', what would you tell them might be behind it?"
+                    ]
+                    question_index = min(question_count - 1, len(alternative_questions) - 1)
+                    next_question = alternative_questions[question_index]
+            else:
+                # Normal flow - get evaluation to determine focus area
+                evaluation = await evaluate_root_cause_depth(cause, latest_response)
+                print(f"DEBUG: Evaluation result: {evaluation}")
+                
+                if evaluation.get("success", False):
+                    focus_area = evaluation.get("suggested_follow_up", "foundational")
+                    print(f"DEBUG: Focus area: {focus_area}")
+                    
+                    # Generate adaptive follow-up question
+                    try:
+                        next_question = await get_adaptive_follow_up_question(cause, latest_response, focus_area, question_count + 1)
+                        print(f"DEBUG: Generated question: {next_question}")
+                    except Exception as e:
+                        print(f"DEBUG: Error generating adaptive question: {e}")
+                        # Use predefined questions as backup
+                        question_prompts = {
+                            "actionable": "What part of this situation could you actually influence or change?",
+                            "foundational": "What deeper need or belief might be driving this pattern?",
+                            "causal": "What do you think is the real engine behind this behavior?"
+                        }
+                        next_question = question_prompts.get(focus_area, "What do you think drives this behavior?")
+                else:
+                    # Evaluation failed, use fallback based on question count
+                    fallback_questions = [
+                        "What makes this behavior feel necessary or important to you?",
+                        "When did you first notice this pattern starting?",
+                        "What would have to change for you to no longer need this behavior?"
+                    ]
+                    question_index = min(question_count - 1, len(fallback_questions) - 1)
+                    next_question = fallback_questions[question_index]
+        else:
+            # This shouldn't happen in normal flow
+            print(f"DEBUG: No latest response found in history: {history}")
+            next_question = "What do you think drives this behavior?"
+
+    return {
+        "next_question": next_question,
+        "is_complete": False
+    }
+
+async def get_next_action_planning_question(cause: str, history: List[str], is_contribution: bool = False, regenerate: bool = False, session_context: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    Determines the next question in the conversational action planning process.
+    Enhanced with session context and input validation for better personalization.
+    """
+    # If regenerate is True or we have enough history (3 complete exchanges = 6 messages), generate action plan options
+    if len(history) >= 6 or regenerate:
+        # Input validation: Check if user responses are too vague
+        user_responses = [history[i] for i in range(1, len(history), 2) if i < len(history)]
+        is_vague_input = _detect_vague_action_planning_input(user_responses, cause)
+        
+        # If input is too vague, return fallback guidance-focused actions
+        if is_vague_input and not session_context:
+            print(f"FALLBACK TRIGGERED - Vague input detected without session context")
+            action_type = "contribution" if is_contribution else "cause"
+            fallback_options = _generate_guidance_focused_fallback_options(cause, action_type, user_responses)
+            
+            return {
+                "success": True,
+                "is_complete": True,
+                "response": "Choose your action plan from the options below:",
+                "action_plan_options": fallback_options
+            }
+        
+        # Create a comprehensive prompt for action plan generation with session context
+        history_text = "\n".join([f"{'AI' if i % 2 == 0 else 'User'}: {msg}" for i, msg in enumerate(history)])
+        print(f"Action planning - History length: {len(history)}")
+        print(f"Action planning - Formatted history: {history_text}")
+        print(f"Action planning - Session context available: {session_context is not None}")
+        
+        # Build context section for the prompt
+        context_section = ""
+        if session_context:
+            context_section = f"""
+**FULL SESSION CONTEXT (for better personalization):**
+- Original Problem: "{session_context.get('pain_point', '')}"
+- Contributing Causes: "{session_context.get('causes', '')}"
+- Identified Assumptions: {session_context.get('assumptions', [])}
+- Perpetuating Behaviors: {session_context.get('perpetuations', [])}
+
+This context should inform your suggestions to make them highly relevant to their specific situation.
+"""
+        
+        action_planning_prompt = f"""You are an expert action planning coach. Generate 4 specific, actionable options to address this cause/contribution.
+
+**Cause/Contribution to Address:** "{cause}"
+{context_section}
+**User's Planning Conversation:**
+{history_text}
+
+**Instructions:**
+- PRIORITIZE session context over conversation details when available
+- Use the original problem and related causes to ensure suggestions are highly relevant
+- Focus on actions that address the specific cause while connecting to their broader situation
+- If user responses were limited, rely more heavily on the session context
+- Make actions specific to their actual situation, not generic advice
+
+**Action Requirements:**
+- Concrete and specific (not generic advice)
+- Directly address the stated cause/contribution
+- Connect to their broader problem context when possible
+- Include implementation details when possible
+- Realistic and achievable
+
+Generate 4 diverse action options that feel personalized to their specific situation.
+
+Return ONLY valid JSON:
+{{
+  "action_plan_options": [
+    "Specific action option 1",
+    "Specific action option 2",
+    "Specific action option 3",
+    "Specific action option 4"
+  ]
+}}"""
+        
+        action_plan_options = []
+        try:
+            print(f"Sending prompt to AI: {action_planning_prompt}")
+            ai_result = await get_claude_response(action_planning_prompt)
+            print(f"Raw AI response for action planning: {ai_result['responseText']}")
+            
+            # Try to extract JSON even if wrapped in markdown
+            response_text = ai_result['responseText'].strip()
+            if response_text.startswith('```json'):
+                response_text = response_text.replace('```json', '').replace('```', '').strip()
+            elif response_text.startswith('```'):
+                response_text = response_text.replace('```', '').strip()
+            
+            # Clean up response text to handle line breaks and special characters in JSON strings
+            import re
+            # Replace literal line breaks in JSON strings with escaped line breaks
+            response_text = re.sub(r'(?<!\\)\n(?=\s*["}])', '\\n', response_text)
+            # Remove any remaining unescaped line breaks that might cause JSON parsing issues
+            response_text = re.sub(r'(?<!\\)\n(?!\s*["}])', ' ', response_text)
+            
+            summary_data = json.loads(response_text)
+            action_plan_options = summary_data.get("action_plan_options", [])
+            print(f"Successfully parsed AI generated {len(action_plan_options)} action plan options: {action_plan_options}")
+            
+        except json.JSONDecodeError as e:
+            print(f"JSON parsing failed for action plan options: {e}")
+            print(f"Attempted to parse: '{response_text if 'response_text' in locals() else ai_result['responseText'] if 'ai_result' in locals() else 'No response'}'")
+        except Exception as e:
+            print(f"AI response failed for action plan options: {e}")
+            
+        # If AI didn't generate valid options, use intelligent fallback
+        if not action_plan_options or len(action_plan_options) == 0:
+            print("FALLBACK TRIGGERED - AI failed to generate personalized options")
+            print(f"History length: {len(history)}")
+            print(f"History content: {history}")
+            print(f"Cause: {cause}")
+            print(f"Is contribution: {is_contribution}")
+            action_type = "contribution" if is_contribution else "cause"
+            
+            # Analyze user responses to detect vague input and provide better guidance
+            user_responses = [history[i] for i in range(1, len(history), 2) if i < len(history)]
+            is_vague_input = _detect_vague_action_planning_input(user_responses, cause)
+            
+            if is_vague_input:
+                # Generate guiding, first-step-oriented options for vague input
+                action_plan_options = _generate_guidance_focused_fallback_options(cause, action_type, user_responses)
+            else:
+                # Use standard fallback for non-vague but AI-failed cases
+                action_plan_options = [
+                    f"Create a specific plan to address this {action_type} with clear steps and timeline",
+                    f"Set up environmental changes or cues to help you change this {action_type}",
+                    f"Start with one small, immediate step you can take today about this {action_type}",
+                    f"Find support or accountability to help you address this {action_type}"
+                ]
+            
+        return {
+            "success": True,
+            "is_complete": True,
+            "response": "Choose your action plan from the options below:",
+            "action_plan_options": action_plan_options
+        }
+
+    # Generate dynamic questions based on conversation history
+    question_count = len(history) // 2  # Number of completed exchanges
+    
+    if question_count == 0:
+        # First question - open-ended about initial action
+        next_question = f"What comes to mind as a first step you could take to address this {'contribution' if is_contribution else 'cause'}?"
+    elif question_count == 1:
+        # Second question - build on their first response
+        user_first_response = history[1] if len(history) > 1 else ""
+        question_prompt = f"""The user mentioned this {'contribution' if is_contribution else 'cause'}: "{cause}"
+        
+Their first action idea was: "{user_first_response}"
+
+Generate a follow-up question that helps them think more deeply about implementation, resources needed, or potential obstacles. Make it specific to their response and conversational.
+
+Return only the question text, no other formatting."""
+        
+        try:
+            ai_result = await get_claude_response(question_prompt)
+            next_question = ai_result['responseText'].strip()
+        except:
+            next_question = "What resources, time, or support would you need to actually make this happen?"
+    
+    elif question_count == 2:
+        # Third question - focus on success measurement or refinement
+        user_first_response = history[1] if len(history) > 1 else ""
+        user_second_response = history[3] if len(history) > 3 else ""
+        
+        question_prompt = f"""The user mentioned this {'contribution' if is_contribution else 'cause'}: "{cause}"
+
+Their action idea: "{user_first_response}"
+Their implementation thoughts: "{user_second_response}"
+
+Generate a final question that helps them think about how they'll know if their action is working, or helps them refine their approach. Make it specific and conversational.
+
+Return only the question text, no other formatting."""
+        
+        try:
+            ai_result = await get_claude_response(question_prompt)
+            next_question = ai_result['responseText'].strip()
+        except:
+            next_question = "How would you know if this action is working? What would tell you it's making a difference?"
+    
+    else:
+        # Fallback - shouldn't happen
+        next_question = "Is there anything else you'd like to consider about this action plan?"
+
+    return {
+        "success": True,
+        "response": next_question,
+        "is_complete": False
+    }
+
+def _detect_vague_action_planning_input(user_responses: List[str], cause: str) -> bool:
+    """
+    Detect if user responses indicate vague input that needs guidance rather than specific actions.
+    """
+    if not user_responses:
+        return True
+        
+    # Combine all user responses for analysis
+    combined_responses = " ".join(user_responses).lower().strip()
+    
+    # Check for common vague response patterns
+    vague_patterns = [
+        "i don't know", "not sure", "no idea", "i'm not sure",
+        "don't know", "maybe", "i guess", "probably",
+        "i need to", "i want to", "i should", "i have to",
+        "just", "simply", "basic", "general", "normal",
+        "something", "anything", "whatever", "somehow"
+    ]
+    
+    # Check for overly brief responses (each response less than 8 words on average)
+    total_words = len(combined_responses.split())
+    avg_words_per_response = total_words / len(user_responses) if user_responses else 0
+    is_brief = avg_words_per_response < 8
+    
+    # Check for vague patterns in responses
+    has_vague_patterns = any(pattern in combined_responses for pattern in vague_patterns)
+    
+    # Check if responses are mostly goal-oriented rather than action-oriented
+    goal_keywords = ["want to", "need to", "should", "have to", "trying to", "hope to"]
+    action_keywords = ["will", "plan to", "going to", "schedule", "set up", "create", "start", "begin"]
+    
+    goal_count = sum(1 for keyword in goal_keywords if keyword in combined_responses)
+    action_count = sum(1 for keyword in action_keywords if keyword in combined_responses)
+    is_goal_heavy = goal_count > action_count and goal_count > 0
+    
+    # Consider input vague if any of these conditions are met
+    return is_brief or has_vague_patterns or is_goal_heavy
+
+def _generate_guidance_focused_fallback_options(cause: str, action_type: str, user_responses: List[str]) -> List[str]:
+    """
+    Generate guidance-focused action plan options for users with vague input.
+    These focus on helping users think through and identify their approach rather than giving generic advice.
+    """
+    # Analyze the cause to provide contextually relevant guidance
+    cause_lower = cause.lower()
+    
+    # Base guidance options that help with planning and identification
+    guidance_options = []
+    
+    # Option 1: Help identify specific behaviors or patterns
+    if "habit" in cause_lower or "always" in cause_lower or "keep" in cause_lower:
+        guidance_options.append(
+            f"Spend 10 minutes tracking when and why this {action_type} happens over the next 3 days, "
+            f"noting triggers, timing, and your mindset each time"
+        )
+    else:
+        guidance_options.append(
+            f"Write down 3 specific situations where this {action_type} typically occurs, "
+            f"including what leads up to it and how you feel during those moments"
+        )
+    
+    # Option 2: Help identify the smallest first step
+    guidance_options.append(
+        f"Identify the single smallest change you could make tomorrow that would start addressing this {action_type}, "
+        f"even if it's just 5 minutes of preparation or research"
+    )
+    
+    # Option 3: Help clarify what success looks like
+    if "replace" in cause_lower or "instead" in cause_lower or "new" in cause_lower:
+        guidance_options.append(
+            f"List 3 alternative behaviors you could try instead, then choose one to test for just 2 days "
+            f"to see how it feels"
+        )
+    else:
+        guidance_options.append(
+            f"Define exactly what it would look like if this {action_type} was no longer a problem, "
+            f"then identify one specific behavior that would indicate progress"
+        )
+    
+    # Option 4: Help identify resources or support needed
+    guidance_options.append(
+        f"Identify one person you could talk to about this {action_type} or one resource "
+        f"(app, book, method) you could explore this week to get clearer on your approach"
+    )
+    
+    return guidance_options
+
 async def get_ai_response(user_id: str, session_id: str, stage: str, user_input: str, session_context: Dict[str, Any], force_guidance: bool = False) -> Dict[str, Any]:
     """Get AI response for a given stage and context"""
     
@@ -546,6 +1296,39 @@ async def get_ai_response(user_id: str, session_id: str, stage: str, user_input:
     
     if not prompt_config:
         prompt = ""
+    elif actual_stage == 'conversational_cause_analysis':
+        cause = session_context.get('cause', '')
+        history = session_context.get('history', [])
+        pain_point = session_context.get('painPoint', '')
+        regenerate = session_context.get('regenerate', False)
+        
+        result = await get_next_cause_analysis_question(cause, history, pain_point, regenerate)
+        
+        # Handle different response formats based on completion status
+        if result.get("is_complete", False):
+            # When complete, we have root_cause_options instead of a question
+            response_text = "Please select a root cause option from the choices provided."
+            return {
+                "success": True,
+                "interactionId": None,
+                "response": response_text,
+                "cost": 0,
+                "tokensUsed": 0,
+                "usage": await check_rate_limits(user_id, session_id),
+                "is_complete": True,
+                "root_cause_options": result.get("root_cause_options", [])
+            }
+        else:
+            # When not complete, we have a next question
+            return {
+                "success": True,
+                "interactionId": None,
+                "response": result.get("next_question", "Could you tell me more about that?"),
+                "cost": 0,
+                "tokensUsed": 0,
+                "usage": await check_rate_limits(user_id, session_id),
+                "is_complete": False
+            }
     elif isinstance(prompt_config, str):
         # Handle legacy string prompts
         prompt = prompt_config
@@ -834,3 +1617,424 @@ Your response must be valid JSON only, no other text."""
             "isValid": is_valid,
             "reason": "AI validation unavailable, using basic validation" if is_valid else "Problem statement appears too brief"
         }
+
+async def analyze_self_awareness(causes: List[str]) -> Dict[str, Any]:
+    """
+    Analyze user's submitted causes to determine if they demonstrate self-awareness.
+    Returns a boolean indicating whether the user has already identified their own role.
+    """
+    if not causes or len(causes) == 0:
+        return {
+            "success": True,
+            "selfAwarenessDetected": False,
+            "reason": "No causes provided"
+        }
+    
+    # Create a specialized prompt for self-awareness analysis
+    causes_text = ', '.join(causes)
+    
+    analysis_prompt = f"""You are an expert in psychological analysis. Your task is to determine if a user has demonstrated self-awareness of their own role in a problem by analyzing their stated causes.
+
+**CRITICAL ANALYSIS CRITERIA:**
+
+A user demonstrates **true self-awareness** only if they explicitly acknowledge their own actions, behaviors, or mindset as a contributing cause. This means:
+- They use "I" statements to describe their own actions (e.g., "I procrastinate," "I react defensively").
+- They take ownership of their habits or patterns (e.g., "I have a habit of interrupting people").
+- They identify their own limiting beliefs or assumptions (e.g., "I believe I'm not good enough, which makes me avoid challenges").
+
+A user **does NOT demonstrate self-awareness** if their causes are:
+- Focused exclusively on external factors (e.g., "The economy is bad").
+- Blaming others entirely (e.g., "My partner is the one who is always negative").
+- Describing their feelings as a passive experience without acknowledging their role in those feelings (e.g., "I feel unsupported" is NOT self-awareness; "I don't communicate my needs, which leads to me feeling unsupported" IS self-awareness).
+
+**CHAIN OF THOUGHT REASONING:**
+
+Before you provide your final JSON response, you must reason through the following steps:
+1. **Analyze each cause individually:** For each cause, determine if it is internally focused (self-aware) or externally focused (blaming/describing).
+2. **Synthesize your findings:** Based on your analysis of all the causes, determine if the user has demonstrated a pattern of self-awareness.
+3. **Formulate your final answer:** Based on your synthesis, determine the final boolean value for `selfAwarenessDetected` and write a concise reason for your decision.
+
+**User's submitted causes:** "{causes_text}"
+
+**Your JSON Response:**
+
+Respond with a JSON object in this exact format:
+{{
+  "selfAwarenessDetected": true/false,
+  "reason": "Brief explanation of your analysis, including a summary of your chain of thought."
+}}
+
+Your response must be valid JSON only, no other text."""
+
+    try:
+        # Use the existing Claude API function
+        ai_result = await get_claude_response(analysis_prompt)
+        
+        # Try to parse the JSON response
+        try:
+            import json
+            analysis_result = json.loads(ai_result["responseText"])
+            
+            return {
+                "success": True,
+                "selfAwarenessDetected": analysis_result.get("selfAwarenessDetected", False),
+                "reason": analysis_result.get("reason", "Analysis completed")
+            }
+            
+        except json.JSONDecodeError:
+            # If JSON parsing fails, fall back to a simple heuristic
+            response_text = ai_result["responseText"].lower()
+            self_awareness_detected = "true" in response_text or "self-awareness detected" in response_text
+            
+            return {
+                "success": True,
+                "selfAwarenessDetected": self_awareness_detected,
+                "reason": "AI analysis completed" if self_awareness_detected else "No clear self-awareness patterns found"
+            }
+            
+    except Exception as e:
+        print(f"Self-awareness analysis error: {e}")
+        # Fallback to improved heuristic analysis
+        self_awareness_keywords = [
+            'i procrastinate', 'i avoid', 'i get defensive', 'i have a habit of',
+            'i need to stop', 'i always do', 'i never do', 'i react', 'i choose to',
+            'i keep doing', 'i tend to', 'i usually', 'i often', 'my behavior',
+            'i don\'t communicate', 'i shut down', 'i get angry', 'i assume'
+        ]
+        causes_lower = causes_text.lower()
+        
+        # Check if any cause contains genuine self-aware language patterns
+        has_self_awareness = any(keyword in causes_lower for keyword in self_awareness_keywords)
+        
+        # Additional check: look for "I" statements that describe actions/behaviors, not just feelings
+        action_patterns = ['i do ', 'i don\'t ', 'i always ', 'i never ', 'i tend to ', 'i have a habit']
+        has_action_awareness = any(pattern in causes_lower for pattern in action_patterns)
+        
+        # Only consider it self-aware if there are action-oriented self-references
+        final_self_awareness = has_self_awareness or has_action_awareness
+        
+        return {
+            "success": True,
+            "selfAwarenessDetected": final_self_awareness,
+            "reason": "Fallback analysis using improved keyword detection" if final_self_awareness else "No self-referential action patterns detected"
+        }
+
+async def generate_action_options(cause: str, is_contribution: bool, user_responses: List[str]) -> List[Dict[str, Any]]:
+    """
+    Generate action options based on cause analysis and user responses from the action planning modal.
+    """
+    cause_type = "contribution" if is_contribution else "cause"
+    responses_text = "; ".join(user_responses) if user_responses else "No responses provided"
+    
+    action_planning_prompt = f"""You are an action planning specialist helping users develop realistic, effective actions to address problem causes.
+
+**Context:**
+- {cause_type.title()}: "{cause}"
+- User's planning responses: "{responses_text}"
+
+**Your Task:**
+Generate 3 diverse, actionable options that directly address this {cause_type}. Each option should be:
+1. **Specific and concrete** - clear what to do, when, and how
+2. **Realistic and achievable** - considers user's actual constraints and resources
+3. **Measurable** - includes clear success indicators
+4. **Root-cause focused** - addresses the underlying issue, not just symptoms
+
+**Response Format:**
+Return a JSON array of action options. Each option should have:
+- "text": A clear, specific action statement (1-2 sentences)
+- "reasoning": Brief explanation of why this approach would be effective (1 sentence)
+
+Example format:
+[
+  {{
+    "text": "Set a daily 25-minute focused work timer first thing each morning before checking email or social media",
+    "reasoning": "This creates a consistent trigger and removes decision fatigue by making it automatic."
+  }},
+  {{
+    "text": "Identify your top priority task the night before and put it prominently on your desk",
+    "reasoning": "This reduces morning decision-making and creates visual accountability."
+  }}
+]
+
+**Critical:** Return only valid JSON. No additional text or formatting."""
+
+    try:
+        ai_result = await get_claude_response(action_planning_prompt)
+        
+        # Try to parse JSON response
+        try:
+            import json
+            action_options = json.loads(ai_result["responseText"])
+            
+            # Ensure we have a list of options
+            if not isinstance(action_options, list):
+                action_options = [action_options] if isinstance(action_options, dict) else []
+            
+            return action_options
+            
+        except json.JSONDecodeError:
+            # Fallback to generic action options if AI fails
+            generic_actions = [
+                {
+                    "text": f"Create a specific plan to address this {cause_type} with clear steps and timeline",
+                    "reasoning": "Having a concrete plan makes action more likely than vague intentions."
+                },
+                {
+                    "text": f"Start with the smallest possible step toward resolving this {cause_type}",
+                    "reasoning": "Small wins build momentum and reduce the barrier to getting started."
+                },
+                {
+                    "text": f"Set up environmental cues or reminders to help you address this {cause_type}",
+                    "reasoning": "External prompts reduce reliance on willpower and memory."
+                }
+            ]
+            return generic_actions
+            
+    except Exception as e:
+        print(f"Action planning error: {e}")
+        # Return fallback options
+        return [
+            {
+                "text": f"Create a specific, measurable action plan to address this {cause_type}",
+                "reasoning": "Concrete plans are more effective than general intentions."
+            },
+            {
+                "text": f"Start with one small step you can take within the next 24 hours",
+                "reasoning": "Immediate action builds momentum toward larger changes."
+            }
+        ]
+
+async def refine_action(initial_action: str, cause: str, user_feedback: str) -> str:
+    """
+    Refine an action based on user feedback and the original cause.
+    """
+    refinement_prompt = f"""You are helping a user refine their action plan to make it more specific and achievable.
+
+**Original Cause:** "{cause}"
+**Initial Action:** "{initial_action}"
+**User Feedback:** "{user_feedback}"
+
+**Your Task:**
+Based on the user's feedback, provide a refined version of their action that is:
+1. More specific and concrete
+2. Addresses any concerns or obstacles they mentioned
+3. Includes clear success metrics
+4. Maintains the core intent of their original action
+
+**Response:**
+Provide only the refined action statement (2-3 sentences maximum). Do not include explanations or additional text."""
+
+    try:
+        ai_result = await get_claude_response(refinement_prompt)
+        return ai_result["responseText"].strip()
+        
+    except Exception as e:
+        print(f"Action refinement error: {e}")
+        # Return the original action if refinement fails
+        return initial_action
+
+async def evaluate_root_cause_depth(cause_text: str, user_response: str = None) -> Dict[str, Any]:
+    """
+    Evaluates how close a cause or user response is to being a true root cause
+    using the Root Cause Litmus Test criteria.
+    
+    Returns a score and analysis of the depth.
+    """
+    text_to_analyze = user_response if user_response else cause_text
+    
+    evaluation_prompt = f"""You are an expert in root cause analysis. Evaluate this statement for depth and causal power.
+
+Statement: "{text_to_analyze}"
+
+Score on two dimensions (0-3 points each):
+
+FOUNDATIONAL DEPTH (How deep is this cause?):
+- 3: Core belief/fundamental need - reveals deep psychological drivers, unmet needs, or foundational assumptions about self/world
+- 2: Significant behavioral pattern - consistent habits or reactions that show deeper themes
+- 1: Surface pattern - observable behaviors without deeper insight
+- 0: Just a symptom - feelings or situations without revealing underlying causes
+
+CAUSAL POWER (Does this drive other problems?):
+- 3: Explains multiple symptoms - connects to and drives several other issues or behaviors
+- 2: Drives some behaviors - clear connections to 1-2 other problems or patterns
+- 1: Minor influence - weak connections to other issues
+- 0: No clear influence - isolated issue with no apparent broader impact
+
+CRITICAL: Respond with ONLY this JSON format, no other text:
+{{
+  "total_score": 0,
+  "foundational_score": 0,
+  "causal_score": 0,
+  "is_root_cause": false,
+  "reasoning": "Brief analysis",
+  "suggested_follow_up": "foundational"
+}}
+
+Set is_root_cause to true if total_score >= 5. Set suggested_follow_up to the lowest-scoring dimension."""
+
+    try:
+        ai_result = await get_claude_response(evaluation_prompt)
+        response_text = ai_result['responseText'].strip()
+        
+        # Clean up common JSON formatting issues
+        if response_text.startswith('```json'):
+            response_text = response_text.replace('```json', '').replace('```', '').strip()
+        elif response_text.startswith('```'):
+            response_text = response_text.replace('```', '').strip()
+        
+        # Handle potential line break issues in reasoning field
+        import re
+        response_text = re.sub(r'(?<!\\)"\s*\n\s*"', '" "', response_text)
+        
+        evaluation_result = json.loads(response_text)
+        
+        return {
+            "success": True,
+            "total_score": evaluation_result.get("total_score", 0),
+            "foundational_score": evaluation_result.get("foundational_score", 0),
+            "causal_score": evaluation_result.get("causal_score", 0),
+            "is_root_cause": evaluation_result.get("is_root_cause", False),
+            "reasoning": evaluation_result.get("reasoning", ""),
+            "suggested_follow_up": evaluation_result.get("suggested_follow_up", "foundational")
+        }
+        
+    except json.JSONDecodeError as e:
+        print(f"JSON parsing failed for root cause evaluation: {e}")
+        print(f"Attempted to parse: '{response_text if 'response_text' in locals() else ai_result['responseText'] if 'ai_result' in locals() else 'No response'}'")
+        
+        # Enhanced fallback with heuristic analysis
+        fallback_score = _analyze_root_cause_heuristically(text_to_analyze)
+        print(f"Using heuristic fallback analysis with score: {fallback_score}")
+        
+        return {
+            "success": False,
+            "total_score": fallback_score["total_score"],
+            "foundational_score": fallback_score["foundational_score"],
+            "causal_score": fallback_score["causal_score"],
+            "is_root_cause": fallback_score["total_score"] >= 5,
+            "reasoning": "AI evaluation failed, using heuristic analysis",
+            "suggested_follow_up": fallback_score["suggested_follow_up"]
+        }
+    except Exception as e:
+        print(f"Root cause evaluation error: {e}")
+        
+        # Enhanced fallback for any other errors
+        fallback_score = _analyze_root_cause_heuristically(text_to_analyze)
+        
+        return {
+            "success": False,
+            "total_score": fallback_score["total_score"],
+            "foundational_score": fallback_score["foundational_score"],
+            "causal_score": fallback_score["causal_score"],
+            "is_root_cause": fallback_score["total_score"] >= 5,
+            "reasoning": "Evaluation service unavailable, using heuristic analysis",
+            "suggested_follow_up": fallback_score["suggested_follow_up"]
+        }
+
+def _analyze_root_cause_heuristically(text: str) -> Dict[str, Any]:
+    """
+    Provide a heuristic analysis when AI evaluation fails.
+    This ensures we don't prematurely end the analysis.
+    """
+    text_lower = text.lower().strip()
+    
+    # Foundational score - look for belief/need language and depth indicators
+    foundational_score = 1  # Default to low-medium
+    if any(pattern in text_lower for pattern in ['i believe', 'i think', 'i feel like', 'i assume', 'i need to be']):
+        foundational_score = 2
+    if any(pattern in text_lower for pattern in ['i must', 'i have to', 'i should always', 'i\'m not good enough', 'i don\'t deserve', 'core belief', 'fundamental']):
+        foundational_score = 3
+    # Look for patterns indicating deeper self-referential analysis
+    if any(pattern in text_lower for pattern in ['i always', 'i never', 'i tend to', 'i have a pattern of']):
+        foundational_score = max(foundational_score, 2)
+    
+    # Causal score - look for causal language and connections to multiple issues
+    causal_score = 1  # Default to low-medium
+    if any(pattern in text_lower for pattern in ['because', 'so i', 'which makes me', 'that\'s why', 'leads me to']):
+        causal_score = 2
+    if any(pattern in text_lower for pattern in ['drives me to', 'compels me', 'forces me to', 'that\'s the root of', 'explains why i']):
+        causal_score = 3
+    # Look for language indicating multiple symptom connections
+    if any(pattern in text_lower for pattern in ['affects everything', 'impacts all', 'causes me to also', 'leads to other']):
+        causal_score = max(causal_score, 2)
+    
+    total_score = foundational_score + causal_score
+    
+    # Determine suggested follow-up based on lowest score
+    scores = {
+        "foundational": foundational_score,
+        "causal": causal_score
+    }
+    suggested_follow_up = min(scores, key=scores.get)
+    
+    return {
+        "total_score": total_score,
+        "foundational_score": foundational_score,
+        "causal_score": causal_score,
+        "suggested_follow_up": suggested_follow_up
+    }
+
+async def get_adaptive_follow_up_question(cause: str, user_response: str, focus_area: str, question_count: int) -> str:
+    """
+    Generates a targeted follow-up question based on the evaluation results and user's specific response.
+    """
+    # Create a more dynamic question based on the context
+    dynamic_prompt = f"""You are helping someone explore the root cause of their problem through thoughtful questioning.
+
+**Context:**
+- Original Cause: "{cause}"
+- User's Response: "{user_response}"
+- Focus Area: {focus_area} (actionable = what they can control, foundational = deeper beliefs/needs, causal = what drives this)
+- Question Number: {question_count}
+
+**Your Task:**
+Generate a single, conversational follow-up question that:
+1. Shows you understand and acknowledge their specific response
+2. Builds naturally on what they just shared
+3. Guides them to explore the {focus_area} dimension more deeply
+4. Feels personalized to their situation (not generic)
+5. Encourages self-reflection and ownership
+
+**Focus Area Guidelines:**
+- actionable: Help them identify what's within their control or influence
+- foundational: Help them explore underlying beliefs, needs, or assumptions
+- causal: Help them understand what drives or perpetuates this pattern
+
+**Example Approach:**
+Instead of asking "What beliefs drive this?" ask something like "You mentioned [specific thing they said] - what do you think that reveals about what you believe is necessary or important?"
+
+Return only the question text, no other formatting or explanation."""
+
+    try:
+        ai_result = await get_claude_response(dynamic_prompt)
+        return ai_result['responseText'].strip()
+    except Exception as e:
+        print(f"Failed to generate adaptive follow-up: {e}")
+        # Improved fallback questions that are more conversational
+        fallback_questions = {
+            "actionable": [
+                "What part of this feels like something you could actually influence or change?",
+                "If you were advising someone else in this exact situation, what would you tell them they have control over?",
+                "What would taking ownership of just one piece of this look like?"
+            ],
+            "foundational": [
+                "What does this pattern tell you about what you believe you need or deserve?",
+                "If this behavior is serving some purpose, what might that purpose be?",
+                "What would have to be true about yourself or your situation for this to make sense?"
+            ],
+            "causal": [
+                "What do you think is really driving this - the engine underneath it all?",
+                "If this pattern completely disappeared tomorrow, what would that mean had changed?",
+                "When you trace this back, what feels like the real starting point?"
+            ]
+        }
+        questions = fallback_questions.get(focus_area, fallback_questions["foundational"])
+        return questions[min(question_count - 1, len(questions) - 1)]
+
+# Create a simple AIService class for the routes to use
+class AIService:
+    async def generate_action_options(self, cause: str, is_contribution: bool, user_responses: List[str]) -> List[Dict[str, Any]]:
+        return await generate_action_options(cause, is_contribution, user_responses)
+    
+    async def refine_action(self, initial_action: str, cause: str, user_feedback: str) -> str:
+        return await refine_action(initial_action, cause, user_feedback)

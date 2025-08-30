@@ -303,7 +303,6 @@ const HistoryPage = () => {
               onClick={closeSummaryModal}
               aria-label="Close modal"
             >
-              ×
             </button>
             
             <div id="summary-content" className="summary-content">
@@ -398,7 +397,6 @@ const HistoryPage = () => {
               onClick={cancelDelete}
               aria-label="Close modal"
             >
-              ×
             </button>
             
             <div className="delete-confirmation">

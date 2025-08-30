@@ -24,9 +24,9 @@ except ImportError:
 
 # Import AI service functions - hybrid import for local/production compatibility
 try:
-    from backend.ai_service import get_ai_response, get_ai_summary
+    from backend.ai_service import get_ai_response, get_ai_summary, analyze_self_awareness, generate_action_options, refine_action, get_next_action_planning_question, get_next_cause_analysis_question
 except ImportError:
-    from ai_service import get_ai_response, get_ai_summary
+    from ai_service import get_ai_response, get_ai_summary, analyze_self_awareness, generate_action_options, refine_action, get_next_action_planning_question, get_next_cause_analysis_question
 
 app = FastAPI()
 
@@ -99,6 +99,15 @@ class AIValidateResponse(BaseModel):
     reason: Optional[str] = None
     error: Optional[str] = None
 
+class AISelfAwarenessRequest(BaseModel):
+    causes: List[str]
+
+class AISelfAwarenessResponse(BaseModel):
+    success: bool
+    selfAwarenessDetected: Optional[bool] = None
+    reason: Optional[str] = None
+    error: Optional[str] = None
+
 class AISummaryRequest(BaseModel):
     sessionId: str
     sessionData: Dict[str, Any]
@@ -113,6 +122,69 @@ class AISummaryResponse(BaseModel):
     usage: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     fallback: Optional[str] = None
+
+class AdaptiveCauseAnalysisRequest(BaseModel):
+    cause: str
+    history: List[str] = []
+    painPoint: str = ""
+    regenerate: bool = False
+
+class AdaptiveCauseAnalysisResponse(BaseModel):
+    success: bool
+    next_question: Optional[str] = None
+    is_complete: bool = False
+    root_cause_options: Optional[List[str]] = []
+    error: Optional[str] = None
+
+class CauseAnalysisRequest(BaseModel):
+    session_id: str
+    cause: str
+    history: List[str] = []
+    regenerate: bool = False
+
+class CauseAnalysisResponse(BaseModel):
+    success: bool
+    response: str
+    is_complete: bool = False
+    root_cause_options: Optional[List[str]] = []
+    error: Optional[str] = None
+
+class ActionPlanRequest(BaseModel):
+    session_id: str
+    cause: str
+    isContribution: bool = False
+    history: List[str] = []
+    regenerate: bool = False
+    include_session_context: bool = True  # New flag to enable enhanced context
+    frontend_session_context: Optional[Dict[str, Any]] = None  # Accept session context from frontend
+
+class ActionPlanResponse(BaseModel):
+    success: bool
+    response: str
+    is_complete: bool = False
+    action_plan_options: Optional[List[str]] = []
+    error: Optional[str] = None
+
+class ActionPlanningRequest(BaseModel):
+    cause: str
+    isContribution: bool = False
+    userResponses: List[str] = []
+    context: str = "action_planning"
+
+class ActionPlanningResponse(BaseModel):
+    success: bool
+    actionOptions: Optional[List[Dict[str, str]]] = []
+    error: Optional[str] = None
+
+class ActionRefinementRequest(BaseModel):
+    initialAction: str
+    cause: str
+    userFeedback: str = ""
+
+class ActionRefinementResponse(BaseModel):
+    success: bool
+    refinedAction: Optional[str] = None
+    error: Optional[str] = None
 
 # Session Models
 class Fear(BaseModel):
@@ -457,6 +529,99 @@ async def delete_session(session_id: str, request: Request):
     
     return {"success": True, "message": "Session deleted successfully"}
 
+@app.post("/api/v1/sessions/{session_id}/causes/analyze", response_model=CauseAnalysisResponse)
+async def analyze_cause(session_id: str, request: CauseAnalysisRequest, current_user: User = Depends(get_current_user)):
+    """
+    Analyzes a single cause through a multi-step process.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    if not request.cause:
+        raise HTTPException(status_code=400, detail="Cause cannot be empty")
+
+    try:
+        result = await get_ai_response(
+            user_id=current_user.id,
+            session_id=session_id,
+            stage="conversational_cause_analysis",
+            user_input="", # Not used in the new flow
+            session_context={"cause": request.cause, "history": request.history, "regenerate": request.regenerate}
+        )
+
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result.get("error", "AI service failed"))
+
+        return CauseAnalysisResponse(
+            success=True,
+            response=result["response"],
+            is_complete=result.get("is_complete", False),
+            root_cause_options=result.get("root_cause_options", [])
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/sessions/{session_id}/actions/plan", response_model=ActionPlanResponse)
+async def plan_action(session_id: str, request: ActionPlanRequest, current_request: Request):
+    """
+    Plans actions for a single cause through a multi-step conversation process.
+    Now enhanced with full session context for better personalization.
+    """
+    # Get current user (optional for now to maintain compatibility)
+    current_user = await get_current_user(current_request)
+    
+    if not request.cause:
+        raise HTTPException(status_code=400, detail="Cause cannot be empty")
+
+    try:
+        # Use frontend session context if provided, otherwise try to fetch from database
+        session_context = None
+        if request.frontend_session_context:
+            session_context = request.frontend_session_context
+            print(f"Action planning - Using frontend session context: {session_context}")
+        elif request.include_session_context:
+            try:
+                db = get_database()
+                object_id = ObjectId(session_id)
+                session_doc = await db.sessions.find_one({"_id": object_id})
+                if session_doc:
+                    session_context = {
+                        "pain_point": session_doc.get("pain_point", ""),
+                        "causes": session_doc.get("issue_tree", {}).get("primary_cause", "") +
+                                 (", " + ", ".join(session_doc.get("issue_tree", {}).get("sub_causes", [])) if session_doc.get("issue_tree", {}).get("sub_causes") else ""),
+                        "assumptions": session_doc.get("assumptions", []),
+                        "perpetuations": session_doc.get("perpetuations", []),
+                        "solutions": session_doc.get("solutions", [])
+                    }
+                    print(f"Action planning - Using database session context: {session_context}")
+            except Exception as e:
+                print(f"Warning: Could not fetch session context: {e}")
+                # Continue without session context rather than fail
+
+        result = await get_next_action_planning_question(
+            request.cause,
+            request.history,
+            request.isContribution,
+            request.regenerate,
+            session_context
+        )
+
+        return ActionPlanResponse(
+            success=True,
+            response=result.get("response", ""),
+            is_complete=result.get("is_complete", False),
+            action_plan_options=result.get("action_plan_options", [])
+        )
+
+    except Exception as e:
+        print(f"Action planning error: {e}")
+        return ActionPlanResponse(
+            success=False,
+            response="",
+            error=str(e)
+        )
+
 # AI Endpoints
 @app.post("/api/ai/assist", response_model=AIAssistResponse)
 async def ai_assist(request: AIAssistRequest, current_request: Request):
@@ -578,4 +743,119 @@ async def validate_problem(request: AIValidateRequest):
         return AIValidateResponse(
             success=False,
             error="Failed to validate problem statement"
+        )
+
+@app.post("/api/ai/analyze-self-awareness", response_model=AISelfAwarenessResponse)
+async def analyze_self_awareness_endpoint(request: AISelfAwarenessRequest):
+    """Analyze if user's submitted causes demonstrate self-awareness"""
+    try:
+        result = await analyze_self_awareness(request.causes)
+        
+        return AISelfAwarenessResponse(**result)
+        
+    except Exception as e:
+        print(f"Self-awareness analysis error: {e}")
+        return AISelfAwarenessResponse(
+            success=False,
+            error="Failed to analyze self-awareness"
+        )
+
+@app.post("/api/ai/plan-action", response_model=ActionPlanningResponse)
+async def plan_action(request: ActionPlanningRequest):
+    """Generate action options based on cause analysis and user responses"""
+    try:
+        if not request.cause.strip():
+            return ActionPlanningResponse(
+                success=False,
+                error="Cause cannot be empty"
+            )
+        
+        # Use AI service to generate action options
+        action_options = await generate_action_options(
+            cause=request.cause,
+            is_contribution=request.isContribution,
+            user_responses=request.userResponses
+        )
+        
+        return ActionPlanningResponse(
+            success=True,
+            actionOptions=action_options
+        )
+        
+    except Exception as e:
+        print(f"Action planning error: {e}")
+        return ActionPlanningResponse(
+            success=False,
+            error=f"Action planning failed: {str(e)}"
+        )
+
+@app.post("/api/ai/refine-action", response_model=ActionRefinementResponse)
+async def refine_action_endpoint(request: ActionRefinementRequest):
+    """Refine an action based on user feedback"""
+    try:
+        if not request.initialAction.strip() or not request.cause.strip():
+            return ActionRefinementResponse(
+                success=False,
+                error="Action and cause are required"
+            )
+        
+        # Use AI service to refine the action
+        refined_action = await refine_action(
+            initial_action=request.initialAction,
+            cause=request.cause,
+            user_feedback=request.userFeedback
+        )
+        
+        return ActionRefinementResponse(
+            success=True,
+            refinedAction=refined_action
+        )
+        
+    except Exception as e:
+        print(f"Action refinement error: {e}")
+        return ActionRefinementResponse(
+            success=False,
+            error=f"Action refinement failed: {str(e)}"
+        )
+
+@app.post("/api/ai/adaptive-cause-analysis", response_model=AdaptiveCauseAnalysisResponse)
+async def adaptive_cause_analysis(request: AdaptiveCauseAnalysisRequest):
+    """
+    New adaptive root cause analysis endpoint using the Root Cause Litmus Test
+    """
+    try:
+        if not request.cause.strip():
+            return AdaptiveCauseAnalysisResponse(
+                success=False,
+                error="Cause cannot be empty"
+            )
+        
+        # Use the new adaptive cause analysis function
+        result = await get_next_cause_analysis_question(
+            cause=request.cause,
+            history=request.history,
+            pain_point=request.painPoint,
+            regenerate=request.regenerate
+        )
+        
+        if result.get("is_complete", False):
+            # Analysis is complete - return root cause options
+            return AdaptiveCauseAnalysisResponse(
+                success=True,
+                is_complete=True,
+                root_cause_options=result.get("root_cause_options", [])
+            )
+        else:
+            # Continue conversation - return next question
+            return AdaptiveCauseAnalysisResponse(
+                success=True,
+                next_question=result.get("next_question", "Could you tell me more about that?"),
+                is_complete=False
+            )
+        
+    except Exception as e:
+        print(f"Adaptive cause analysis error: {e}")
+        return AdaptiveCauseAnalysisResponse(
+            success=False,
+            error=f"Adaptive cause analysis failed: {str(e)}"
         )

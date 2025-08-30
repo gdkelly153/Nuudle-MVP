@@ -156,7 +156,6 @@ export default function SessionSummaryPage() {
                 onClick={closeSummaryModal}
                 aria-label="Close modal"
               >
-                ×
               </button>
               
               <div id="summary-content" className="summary-content">

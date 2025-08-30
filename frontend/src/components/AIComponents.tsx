@@ -40,7 +40,7 @@ export const HelpMeNuudleButton: React.FC<HelpMeNuudleButtonProps> = ({
   const tooltipShouldBeEnabled = isCorrectStep && disabled && !isLoading;
 
   return (
-    <Tooltip text="Attempt the prompt to utilize me." isDisabled={tooltipShouldBeEnabled}>
+    <Tooltip text="Enter a problem statement to utilize me." isDisabled={tooltipShouldBeEnabled}>
       <div className={`help-me-nuudle-button-container inline-block ${isHighlighted ? 'highlighted' : ''}`}>
         <BrainIconWithAnimation size={20} className="text-blue-600" />
         <button
@@ -66,10 +66,38 @@ export const AIAssistButton: React.FC<AIComponentProps & {
   disabled: boolean;
   currentStep: number;
   buttonStep: number;
-}> = ({ stage, isLoading, onRequest, disabled, currentStep, buttonStep }) => {
+  customButtonText?: string;
+  causesSubmitted?: boolean;
+  causeText?: string;
+  hasExistingAction?: boolean;
+}> = ({ stage, isLoading, onRequest, disabled, currentStep, buttonStep, customButtonText, causesSubmitted, causeText, hasExistingAction }) => {
   const isCorrectStep = currentStep === buttonStep;
   const isButtonDisabled = !isCorrectStep || disabled || isLoading;
-  const tooltipShouldBeEnabled = isCorrectStep && disabled && !isLoading;
+
+  const getTooltipText = () => {
+    if (!isButtonDisabled) return undefined;
+
+    if (stage === 'root_cause') {
+      if (!causesSubmitted) {
+        return "Finish adding causes then click submit to activate me";
+      }
+      if (!causeText || !causeText.trim()) {
+        return "Write a contributing cause into the text box to utilize me";
+      }
+    }
+    
+    if (stage === 'perpetuation') {
+      return "Enter one way you may be perpetuating the problem to utilize me";
+    }
+    
+    if (stage === 'action_planning' && hasExistingAction) {
+      return "You've already selected actions for this cause. Delete your planned actions to utilize me again.";
+    }
+    
+    return "Attempt the prompt to utilize me.";
+  };
+
+  const tooltipText = getTooltipText();
 
   const buttonText = {
     problem_articulation_direct: 'Help me articulate my problem',
@@ -92,28 +120,28 @@ export const AIAssistButton: React.FC<AIComponentProps & {
   };
 
   return (
-    <Tooltip text="Attempt the prompt to utilize me." isDisabled={tooltipShouldBeEnabled}>
+    <Tooltip text={tooltipText || ''} isDisabled={!!tooltipText}>
       <div className="ai-button-wrapper relative inline-block">
+        <BrainIconWithAnimation size={16} className={isButtonDisabled ? "text-gray-400" : isLoading ? "text-blue-600" : "text-white"} />
         <button
           onClick={onRequest}
           disabled={isButtonDisabled}
           className={`
-            ai-assist-button inline-flex items-center gap-2 rounded-md transition-all duration-200
+            ai-assist-button inline-flex items-center gap-2 rounded-md transition-all duration-200 px-3 py-1.5 text-sm font-medium
             ${isButtonDisabled
-              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
               : isLoading
-                ? 'bg-blue-100 text-blue-600 cursor-wait'
-                : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md hover:-translate-y-0.5'
+                ? 'bg-blue-100 text-blue-600 cursor-wait border border-blue-200'
+                : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg hover:-translate-y-1 hover:scale-105 border border-blue-700'
             }
           `}
           aria-describedby={`ai-help-description-${stage}`}
           style={{ minWidth: 'fit-content' }}
         >
-          <BrainIconWithAnimation size={16} className="text-blue-600" />
           {isLoading ? (
             <span style={{ fontSize: 'inherit' }}>Nuudling...</span>
           ) : (
-            <span>{buttonText[stage]}</span>
+            <span>{customButtonText || buttonText[stage]}</span>
           )}
         </button>
       </div>
@@ -316,3 +344,4 @@ export const SuggestedCause: React.FC<{
     </div>
   );
 };
+

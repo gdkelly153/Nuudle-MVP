@@ -93,7 +93,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           onClick={onClose}
           type="button"
         >
-          ×
         </button>
 
         <div className="auth-header">
@@ -208,30 +207,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           overflow-y: auto;
         }
 
-        .modal-close-button {
-          position: absolute;
-          top: 1rem;
-          right: 1rem;
-          background: var(--warm-brick);
-          border: 1px solid var(--warm-brick-hover);
-          border-radius: 50%;
-          font-size: 1rem;
-          cursor: pointer;
-          color: white;
-          width: 30px;
-          height: 30px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 0.2s ease;
-          z-index: 10;
-        }
-
-        .modal-close-button:hover {
-          background: var(--warm-brick-hover);
-          transform: translateY(-1px);
-          box-shadow: 0 2px 4px rgba(205, 101, 71, 0.3);
-        }
 
         .auth-header {
           text-align: center;
@@ -375,10 +350,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             max-height: 95vh;
           }
           
-          .modal-close-button {
-            top: 0.5rem;
-            right: 0.5rem;
-          }
         }
       `}</style>
     </div>

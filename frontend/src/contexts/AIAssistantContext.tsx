@@ -18,6 +18,31 @@ interface AIResponse {
   userInput: any;
 }
 
+export interface ChatMessage {
+  sender: 'ai' | 'user';
+  text: string;
+}
+
+interface CauseAnalysisState {
+  cause: string;
+  history: ChatMessage[];
+  isComplete: boolean;
+  summary: string | null;
+  smartChips: string[];
+  rootCauseOptions: string[];
+  error: string | null;
+}
+
+interface ActionPlanningState {
+  cause: string;
+  isContribution: boolean;
+  history: ChatMessage[];
+  isComplete: boolean;
+  summary: string | null;
+  actionPlanOptions: string[];
+  error: string | null;
+}
+
 interface AIAssistantContextType {
   usage: AIUsage;
   isEnabled: boolean;
@@ -27,7 +52,15 @@ interface AIAssistantContextType {
   responses: { [stage: string]: AIResponse | null };
   activeStage: string | null;
   error: string | null;
+  causeAnalysis: CauseAnalysisState | null;
+  actionPlanning: ActionPlanningState | null;
   requestAssistance: (stage: string, userInput: string, context: any, forceGuidance?: boolean) => Promise<void>;
+  requestCauseAnalysis: (cause: string, history: ChatMessage[], regenerate?: boolean, painPoint?: string) => Promise<void>;
+  requestActionPlanning: (cause: string, history: ChatMessage[], isContribution?: boolean, regenerate?: boolean, sessionContext?: any) => Promise<void>;
+  setCauseAnalysisState: (state: CauseAnalysisState) => void;
+  setActionPlanningState: (state: ActionPlanningState) => void;
+  clearCauseAnalysis: () => void;
+  clearActionPlanning: () => void;
   dismissResponse: () => void;
   provideFeedback: (helpful: boolean) => Promise<void>;
   clearResponseForStage: (stage: string) => void;
@@ -62,6 +95,8 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
   const [responses, setResponses] = useState<{ [stage: string]: AIResponse | null }>({});
   const [activeStage, setActiveStage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [causeAnalysis, setCauseAnalysis] = useState<CauseAnalysisState | null>(null);
+  const [actionPlanning, setActionPlanning] = useState<ActionPlanningState | null>(null);
 
   // Fetch usage on mount
   useEffect(() => {
@@ -229,6 +264,142 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
     return activeStage ? responses[activeStage]?.response ?? null : null;
   };
 
+  const requestCauseAnalysis = async (cause: string, history: ChatMessage[], regenerate: boolean = false, painPoint: string = '') => {
+    if (!sessionId) return;
+
+    setLoadingStage('cause_analysis');
+    setCauseAnalysis(prev => ({ ...prev!, cause, history, error: null }));
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ai/adaptive-cause-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          cause,
+          history: history.map(m => m.text),
+          painPoint: painPoint,
+          regenerate
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        if (data.is_complete) {
+          // Conversation is complete - show root cause options
+          setCauseAnalysis({
+            cause,
+            history,
+            isComplete: true,
+            summary: null,
+            smartChips: [],
+            rootCauseOptions: data.root_cause_options || [],
+            error: null,
+          });
+        } else {
+          // Continue conversation - add AI question to history
+          const newHistory = [...history, { sender: 'ai' as const, text: data.next_question }];
+          setCauseAnalysis({
+            cause,
+            history: newHistory,
+            isComplete: false,
+            summary: null,
+            smartChips: [],
+            rootCauseOptions: [],
+            error: null,
+          });
+        }
+      } else {
+        setCauseAnalysis(prev => ({
+          ...prev!,
+          error: data.error || 'Failed to analyze cause'
+        }));
+      }
+    } catch (error) {
+      setCauseAnalysis(prev => ({ ...prev!, error: 'Failed to connect to the server' }));
+    } finally {
+      setLoadingStage(null);
+    }
+  };
+
+  const clearCauseAnalysis = () => {
+    setCauseAnalysis(null);
+  };
+
+  const requestActionPlanning = async (cause: string, history: ChatMessage[], isContribution: boolean = false, regenerate: boolean = false, sessionContext?: any) => {
+    if (!sessionId) return;
+
+    setLoadingStage('action_planning');
+    setActionPlanning(prev => ({
+      ...prev!,
+      cause,
+      isContribution,
+      history,
+      error: null
+    }));
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/sessions/${sessionId}/actions/plan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          session_id: sessionId,
+          cause,
+          isContribution,
+          history: history.map(m => m.text),
+          regenerate,
+          include_session_context: true,  // Enable enhanced context
+          frontend_session_context: sessionContext  // Pass current session state from frontend
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        // For regeneration, don't add new AI message to history
+        const newHistory = regenerate ? history : [...history, { sender: 'ai' as const, text: data.response }];
+        setActionPlanning({
+          cause,
+          isContribution,
+          history: newHistory,
+          isComplete: data.is_complete || false,
+          summary: data.is_complete ? data.response : null,
+          actionPlanOptions: data.action_plan_options || [],
+          error: null,
+        });
+      } else {
+        throw new Error(data.error || 'Action planning failed');
+      }
+    } catch (error) {
+      console.error('Action planning error:', error);
+      setActionPlanning(prev => ({
+        ...prev!,
+        error: error instanceof Error ? error.message : 'Failed to connect to the server'
+      }));
+    } finally {
+      setLoadingStage(null);
+    }
+  };
+
+  const clearActionPlanning = () => {
+    setActionPlanning(null);
+  };
+
+  const setCauseAnalysisState = (state: CauseAnalysisState) => {
+    setCauseAnalysis(state);
+  };
+
+  const setActionPlanningState = (state: ActionPlanningState) => {
+    setActionPlanning(state);
+  };
+
   const value: AIAssistantContextType = {
     usage,
     isEnabled,
@@ -238,7 +409,15 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
     responses,
     activeStage,
     error,
+    causeAnalysis,
+    actionPlanning,
     requestAssistance,
+    requestCauseAnalysis,
+    requestActionPlanning,
+    setCauseAnalysisState,
+    setActionPlanningState,
+    clearCauseAnalysis,
+    clearActionPlanning,
     dismissResponse,
     provideFeedback,
     clearResponseForStage,
