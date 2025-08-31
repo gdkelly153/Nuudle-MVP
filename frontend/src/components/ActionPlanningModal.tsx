@@ -31,28 +31,35 @@ export function ActionPlanningModal({
   const [customOption, setCustomOption] = useState('');
   const [generationCount, setGenerationCount] = useState(0);
   const [persistedSelectedOptions, setPersistedSelectedOptions] = useState<string[]>([]);
-  const [showSkipModal, setShowSkipModal] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const conversationHistoryRef = useRef<HTMLDivElement>(null);
 
   const maxSelections = 3;
-  const maxGenerations = 3;
+  const maxGenerations = 2;
 
   const handleClose = () => {
     onClose();
   };
 
   useEffect(() => {
-    ai.requestActionPlanning(causeText, history, isContribution, false, sessionContext);
+    ai.requestActionPlanning(causeText, history, isContribution, false, sessionContext, 0, []);
     return () => ai.clearActionPlanning();
   }, [causeId]);
 
+  // Derived state - calculated from clean sources
   const currentQuestion = ai.actionPlanning?.history
     ?.filter(item => item.sender === 'ai')
     ?.slice(-1)[0]?.text || '';
 
-  const exchangeCount = Math.floor((ai.actionPlanning?.history?.length || 0) / 2);
-  const currentQuestionNumber = exchangeCount + 1;
+  const historyLength = ai.actionPlanning?.history?.length || 0;
+  const exchangeCount = Math.floor(historyLength / 2);
+  const currentQuestionNumber = Math.min(exchangeCount + 1, 3); // Cap at 3 for Action Plan
+  
+  // Fix: For Action Plan, determine the ACTUAL question based on history structure
+  const actualQuestionNumber = historyLength === 0 ? 1 :
+                              historyLength <= 2 ? 1 :
+                              historyLength <= 4 ? 2 : 3;
+  
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -62,15 +69,15 @@ export function ActionPlanningModal({
   }, [currentAnswer]);
 
   useEffect(() => {
-    if (currentQuestion && !currentAnswer) {
-      const currentQuestionIndex = Math.floor((ai.actionPlanning?.history?.length || 0) / 2);
-      const savedAnswer = savedAnswers[currentQuestionIndex] || '';
+    if (currentQuestion) {
+      // Use the ACTUAL question number based on history position, not the display number
+      const savedAnswerIndex = actualQuestionNumber - 1; // Q1->0, Q2->1, Q3->2
+      const savedAnswer = savedAnswers[savedAnswerIndex] || '';
       
-      if (savedAnswer) {
-        setCurrentAnswer(savedAnswer);
-      }
+      
+      setCurrentAnswer(savedAnswer);
     }
-  }, [currentQuestion]);
+  }, [currentQuestion, actualQuestionNumber, savedAnswers, historyLength]);
 
   useEffect(() => {
     if (conversationHistoryRef.current) {
@@ -87,70 +94,46 @@ export function ActionPlanningModal({
 
   const handleSend = () => {
     if (!currentAnswer.trim() || currentAnswer.trim().length < 3) return;
-    
+
     const currentHistory = ai.actionPlanning?.history || [];
-    const currentQuestionIndex = Math.floor(currentHistory.length / 2);
-    
+    // Use ACTUAL question number based on history position
+    const savedAnswerIndex = actualQuestionNumber - 1; // Q1->0, Q2->1, Q3->2
+
+
     const newSavedAnswers = [...savedAnswers];
-    newSavedAnswers[currentQuestionIndex] = currentAnswer;
+    newSavedAnswers[savedAnswerIndex] = currentAnswer;
     setSavedAnswers(newSavedAnswers);
-    
-    // Create new history with user's response
-    // Include all current history plus the user's response
+
+
     const newHistory = [...currentHistory, { sender: 'user' as const, text: currentAnswer }];
-    
+
     ai.requestActionPlanning(causeText, newHistory, isContribution, false, sessionContext);
-    
     setCurrentAnswer('');
   };
 
-  const handleSkip = () => {
-    const currentHistory = ai.actionPlanning?.history || [];
-    const currentQuestionIndex = Math.floor(currentHistory.length / 2);
-    
-    const newSavedAnswers = [...savedAnswers];
-    newSavedAnswers[currentQuestionIndex] = "I'm not sure.";
-    setSavedAnswers(newSavedAnswers);
-    
-    const newHistory = [...currentHistory, { sender: 'user' as const, text: "I'm not sure." }];
-    
-    ai.requestActionPlanning(causeText, newHistory, isContribution, false, sessionContext);
-  };
 
   const handleBack = () => {
     const currentHistory = ai.actionPlanning?.history || [];
     if (currentHistory.length < 2) return;
+
 
     if (ai.actionPlanning?.isComplete) {
       setSelectedOptions([]);
       setCustomOption('');
       setGenerationCount(0);
     }
-    
-    if (currentAnswer.trim()) {
-      const currentQuestionIndex = Math.floor(currentHistory.length / 2);
-      const newSavedAnswers = [...savedAnswers];
-      newSavedAnswers[currentQuestionIndex] = currentAnswer;
-      setSavedAnswers(newSavedAnswers);
-    }
-    
+
     const newHistory = ai.actionPlanning?.isComplete
       ? currentHistory.slice(0, -1)
       : currentHistory.slice(0, -2);
-    
+
+
     ai.setActionPlanningState({
-      cause: causeText,
-      isContribution: isContribution,
+      ...ai.actionPlanning!,
       history: newHistory,
       isComplete: false,
-      summary: null,
       actionPlanOptions: [],
-      error: null,
     });
-    
-    const previousQuestionIndex = Math.floor(newHistory.length / 2);
-    const previousAnswer = savedAnswers[previousQuestionIndex] || '';
-    setCurrentAnswer(previousAnswer);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -160,18 +143,6 @@ export function ActionPlanningModal({
     }
   };
 
-  const handleGenerateActionPlans = () => {
-    setShowSkipModal(true);
-  };
-
-  const handleSkipToActionPlans = () => {
-    setShowSkipModal(false);
-    ai.requestActionPlanning(causeText, ai.actionPlanning?.history || [], isContribution, true, sessionContext);
-  };
-
-  const handleCancelSkip = () => {
-    setShowSkipModal(false);
-  };
 
   return (
     <div className="modal-overlay" onClick={handleClose}>
@@ -179,11 +150,11 @@ export function ActionPlanningModal({
         <button onClick={handleClose} className="modal-close-button"></button>
         
         <div className="cause-analysis-header">
-          <div className="cause-pill">{causeText}</div>
+          <div className="cause-pill" style={{ whiteSpace: 'normal', wordBreak: 'break-word', padding: '0.75rem 1.25rem' }}>{causeText}</div>
           {!ai.actionPlanning?.isComplete && (
             <div className="progress-indicator-container">
               <div className="progress-indicator">
-                Question {currentQuestionNumber}
+                Question {actualQuestionNumber}
               </div>
             </div>
           )}
@@ -192,16 +163,29 @@ export function ActionPlanningModal({
         <div className="conversation-container">
           {ai.actionPlanning && ai.actionPlanning.history.length > 1 && !ai.actionPlanning.isComplete && (
             <div className="conversation-history" ref={conversationHistoryRef}>
-              {ai.actionPlanning.history.slice(0, -1).map((message, index) => (
-                <div key={index} className={`message ${message.sender === 'ai' ? 'ai-message' : 'user-message'}`}>
-                  {message.sender === 'ai' && (
-                    <div className="brain-icon-container">
-                      <Brain className="brain-icon" size={16} />
-                    </div>
-                  )}
-                  <p className={message.sender === 'user' ? 'user-text' : ''}>{message.text}</p>
-                </div>
-              ))}
+              {ai.actionPlanning.history
+                .slice(0, -1) // Remove current question
+                .filter((message, index) => {
+                  if (!ai.actionPlanning) return false;
+                  // Only show completed Q&A pairs (questions with submitted answers)
+                  if (message.sender === 'ai') {
+                    // For AI messages (questions), only show if there's a corresponding user answer
+                    const hasUserAnswer = ai.actionPlanning.history[index + 1]?.sender === 'user';
+                    return hasUserAnswer;
+                  }
+                  // For user messages, only show if they correspond to a previously shown AI question
+                  return index > 0 && ai.actionPlanning.history[index - 1]?.sender === 'ai';
+                })
+                .map((message, index) => (
+                  <div key={index} className={`message ${message.sender === 'ai' ? 'ai-message' : 'user-message'}`}>
+                    {message.sender === 'ai' && (
+                      <div className="brain-icon-container">
+                        <Brain className="brain-icon" size={16} />
+                      </div>
+                    )}
+                    <p className={message.sender === 'user' ? 'user-text' : ''}>{message.text}</p>
+                  </div>
+                ))}
             </div>
           )}
           
@@ -239,7 +223,7 @@ export function ActionPlanningModal({
                 value={currentAnswer}
                 onChange={(e) => setCurrentAnswer(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Share your thoughts... (Press Enter to submit, Shift+Enter for new line)"
+                placeholder="It's okay if you're not sure. Take your best guess... (Press Enter to submit, Shift+Enter for new line)"
                 className="expanding-textarea"
                 disabled={ai.loadingStage === 'action_planning'}
               />
@@ -263,20 +247,6 @@ export function ActionPlanningModal({
                       <ChevronRight size={16} />
                     </button>
                   </div>
-                </div>
-                <div className="secondary-actions">
-                  <button onClick={handleSkip} className="skip-button tertiary">
-                    Skip Question
-                  </button>
-                  {exchangeCount >= 2 && (
-                    <button
-                      onClick={handleGenerateActionPlans}
-                      disabled={ai.loadingStage === 'action_planning'}
-                      className="generate-button tertiary"
-                    >
-                      Skip to Action Plans
-                    </button>
-                  )}
                 </div>
               </div>
             </div>
@@ -303,8 +273,10 @@ export function ActionPlanningModal({
                 onGenerateMore={() => {
                   if (generationCount < maxGenerations && selectedOptions.length < maxSelections) {
                     setPersistedSelectedOptions(selectedOptions);
-                    setGenerationCount(prev => prev + 1);
-                    ai.requestActionPlanning(causeText, ai.actionPlanning?.history || [], isContribution, true, sessionContext);
+                    const newGenerationCount = generationCount + 1;
+                    setGenerationCount(newGenerationCount);
+                    const existingPlans = ai.actionPlanning?.actionPlanOptions || [];
+                    ai.requestActionPlanning(causeText, ai.actionPlanning?.history || [], isContribution, true, sessionContext, newGenerationCount, existingPlans);
                   }
                 }}
               />
@@ -332,33 +304,6 @@ export function ActionPlanningModal({
             </div>
           )}
 
-          {showSkipModal && (
-            <div className="skip-modal-overlay">
-              <div className="skip-modal">
-                <h3>Are you sure you want to skip ahead?</h3>
-                <p>
-                  Answering all the questions provides the best action plan recommendations.
-                </p>
-                <p>
-                  If you skip now, we'll generate the best possible options based on your answers so far.
-                </p>
-                <div className="skip-modal-actions">
-                  <button
-                    onClick={handleCancelSkip}
-                    className="keep-answering-button primary"
-                  >
-                    Keep Answering
-                  </button>
-                  <button
-                    onClick={handleSkipToActionPlans}
-                    className="skip-ahead-button secondary"
-                  >
-                    Skip Ahead
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
 
           {ai.actionPlanning?.error && (
             <div className="error-section">

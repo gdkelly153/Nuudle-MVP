@@ -43,6 +43,14 @@ interface ActionPlanningState {
   error: string | null;
 }
 
+interface FearAnalysisState {
+  mitigationPlan: string;
+  isComplete: boolean;
+  mitigationOptions: string[];
+  contingencyOptions: string[];
+  error: string | null;
+}
+
 interface AIAssistantContextType {
   usage: AIUsage;
   isEnabled: boolean;
@@ -54,13 +62,17 @@ interface AIAssistantContextType {
   error: string | null;
   causeAnalysis: CauseAnalysisState | null;
   actionPlanning: ActionPlanningState | null;
+  fearAnalysis: FearAnalysisState | null;
   requestAssistance: (stage: string, userInput: string, context: any, forceGuidance?: boolean) => Promise<void>;
   requestCauseAnalysis: (cause: string, history: ChatMessage[], regenerate?: boolean, painPoint?: string) => Promise<void>;
-  requestActionPlanning: (cause: string, history: ChatMessage[], isContribution?: boolean, regenerate?: boolean, sessionContext?: any) => Promise<void>;
+  requestActionPlanning: (cause: string, history: ChatMessage[], isContribution?: boolean, regenerate?: boolean, sessionContext?: any, generationCount?: number, existingPlans?: string[]) => Promise<void>;
+  requestFearAnalysis: (mitigationPlan: string, fearContext?: any) => Promise<void>;
   setCauseAnalysisState: (state: CauseAnalysisState) => void;
   setActionPlanningState: (state: ActionPlanningState) => void;
+  setFearAnalysisState: (state: FearAnalysisState) => void;
   clearCauseAnalysis: () => void;
   clearActionPlanning: () => void;
+  clearFearAnalysis: () => void;
   dismissResponse: () => void;
   provideFeedback: (helpful: boolean) => Promise<void>;
   clearResponseForStage: (stage: string) => void;
@@ -97,6 +109,7 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [causeAnalysis, setCauseAnalysis] = useState<CauseAnalysisState | null>(null);
   const [actionPlanning, setActionPlanning] = useState<ActionPlanningState | null>(null);
+  const [fearAnalysis, setFearAnalysis] = useState<FearAnalysisState | null>(null);
 
   // Fetch usage on mount
   useEffect(() => {
@@ -327,7 +340,7 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
     setCauseAnalysis(null);
   };
 
-  const requestActionPlanning = async (cause: string, history: ChatMessage[], isContribution: boolean = false, regenerate: boolean = false, sessionContext?: any) => {
+  const requestActionPlanning = async (cause: string, history: ChatMessage[], isContribution: boolean = false, regenerate: boolean = false, sessionContext?: any, generationCount?: number, existingPlans?: string[]) => {
     if (!sessionId) return;
 
     setLoadingStage('action_planning');
@@ -350,8 +363,10 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
           isContribution,
           history: history.map(m => m.text),
           regenerate,
-          include_session_context: true,  // Enable enhanced context
-          frontend_session_context: sessionContext  // Pass current session state from frontend
+          include_session_context: true,
+          frontend_session_context: sessionContext,
+          generation_count: generationCount,
+          existing_plans: existingPlans
         }),
       });
 
@@ -392,12 +407,70 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
     setActionPlanning(null);
   };
 
+  const requestFearAnalysis = async (mitigationPlan: string, fearContext?: any) => {
+    if (!sessionId) return;
+
+    setLoadingStage('fear_analysis');
+    setFearAnalysis(prev => ({
+      ...prev!,
+      mitigationPlan,
+      error: null
+    }));
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ai/fear-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          mitigation_plan: mitigationPlan,
+          fear_context: fearContext || {}
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        setFearAnalysis({
+          mitigationPlan,
+          isComplete: true,
+          mitigationOptions: data.mitigation_options || [],
+          contingencyOptions: data.contingency_options || [],
+          error: null,
+        });
+      } else {
+        throw new Error(data.error || 'Fear analysis failed');
+      }
+    } catch (error) {
+      console.error('Fear analysis error:', error);
+      setFearAnalysis(prev => ({
+        ...prev!,
+        error: error instanceof Error ? error.message : 'Failed to connect to the server'
+      }));
+    } finally {
+      setLoadingStage(null);
+    }
+  };
+
+  const clearFearAnalysis = () => {
+    setFearAnalysis(null);
+  };
+
   const setCauseAnalysisState = (state: CauseAnalysisState) => {
     setCauseAnalysis(state);
   };
 
   const setActionPlanningState = (state: ActionPlanningState) => {
     setActionPlanning(state);
+  };
+
+  const setFearAnalysisState = (state: FearAnalysisState) => {
+    setFearAnalysis(state);
   };
 
   const value: AIAssistantContextType = {
@@ -411,13 +484,17 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
     error,
     causeAnalysis,
     actionPlanning,
+    fearAnalysis,
     requestAssistance,
     requestCauseAnalysis,
     requestActionPlanning,
+    requestFearAnalysis,
     setCauseAnalysisState,
     setActionPlanningState,
+    setFearAnalysisState,
     clearCauseAnalysis,
     clearActionPlanning,
+    clearFearAnalysis,
     dismissResponse,
     provideFeedback,
     clearResponseForStage,

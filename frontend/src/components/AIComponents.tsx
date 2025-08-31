@@ -75,6 +75,7 @@ export const AIAssistButton: React.FC<AIComponentProps & {
   const isButtonDisabled = !isCorrectStep || disabled || isLoading;
 
   const getTooltipText = () => {
+    if (!isCorrectStep) return undefined;
     if (!isButtonDisabled) return undefined;
 
     if (stage === 'root_cause') {

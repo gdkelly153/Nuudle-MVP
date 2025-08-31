@@ -13,7 +13,7 @@ except ImportError:
 # Initialize Anthropic client
 anthropic = Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
 
-SYSTEM_PROMPT = """You are an AI assistant named Nuudle, designed to help users think through their problems. Your goal is to ask thoughtful, open-ended questions that encourage users to explore their own thinking, assumptions, and potential actions. You must not give direct advice, solutions, or tell users what to do.
+GUIDANCE_SYSTEM_PROMPT = """You are an AI assistant named Nuudle, designed to help users think through their problems. Your goal is to ask thoughtful, open-ended questions that encourage users to explore their own thinking, assumptions, and potential actions. You must not give direct advice, solutions, or tell users what to do.
 
 Your tone should be supportive, encouraging, and genuinely curious. When users provide insightful or well-articulated ideas, acknowledge and validate their thinking with specific, personalized comments rather than generic praise. Always address the user as "you" and never refer to them as "the user."
 
@@ -28,6 +28,17 @@ For this task, a "revealing insight" is defined as a statement that most likely 
 Your question must not summarize their response, but rather use a specific detail from it to move the conversation to a deeper level.
 
 You should format your responses using Markdown. Use paragraphs for separation and lists (numbered or bulleted) where appropriate. For bulleted lists, always use the standard markdown syntax with "- " (dash followed by space) at the beginning of each bullet point. Add extra line breaks after each bullet point to improve readability."""
+
+OPTION_GENERATION_SYSTEM_PROMPT = """You are an AI assistant named Nuudle, acting as an expert strategic coach. Your primary goal is to generate specific, actionable, and creative options tailored to the user's unique situation.
+
+Your tone should be encouraging, strategic, and insightful. When generating options, your primary objective is to provide choices that are highly relevant and likely to be effective, based on the user's specific context. As a secondary objective, these options should be diverse and creative, offering a range of distinct paths for the user to consider.
+
+After the very first response of a session, you MUST NOT refer to yourself, your role, or your purpose (e.g., "As an AI," "My goal is to," "I'm here to help you"). Your focus must be entirely on the user's content.
+
+You will be given context in placeholders like {{placeholder}}. You must use the information inside these placeholders to inform your response, but you must NEVER include the placeholder syntax (e.g., '{{placeholder}}') in your final response.
+
+You will be given the user's problem, their identified causes, and their conversational history. Use this context to ensure your suggestions are deeply personalized and relevant. Always address the user as "you."
+"""
 
 # Old keyword-based validation functions removed - now using AI-powered validation
 
@@ -258,7 +269,10 @@ In this section, provide a concluding paragraph that summarizes the path forward
             "falsifier": "What could you see that would make you change your mind?"
         },
         "depth_pass": "Why do you think that need/feeling exists?",
-        "summary_prompt": """Based on the following conversation about a user's cause, generate 3-4 potential root cause statements that capture the deeper insights revealed through the dialogue.
+        "summary_prompt": """**CRITICAL INSTRUCTION - CONTEXT-AWARE TERM INTERPRETATION:**
+Before analyzing anything, carefully examine the conversation context, especially the original problem statement and stated cause, to understand the user's specific terminology. Pay special attention to how terms are defined in their problem, but also use common sense. For example, if they mentioned "drinking alcohol" in their original problem, a subsequent reference to "drinking" should usually be understood as "drinking alcohol," unless the context clearly implies otherwise (e.g., "drinking water instead"). Apply this contextual understanding consistently throughout your analysis.
+
+Based on the following conversation about a user's cause, generate 3-4 potential root cause statements that capture the deeper insights revealed through the dialogue.
 
 Each root cause option should:
 - Be a complete, actionable statement (not a question)
@@ -304,7 +318,10 @@ Return your response as a JSON object with the key 'question'.
             "support": "Who or what could help you stay accountable to this?"
         },
         "depth_pass": "Why do you think this approach would be effective for addressing this cause?",
-        "summary_prompt": """Based on the following conversation about action planning for a user's cause, generate 3-4 specific, actionable plan options.
+        "summary_prompt": """**CRITICAL INSTRUCTION - CONTEXT-AWARE TERM INTERPRETATION:**
+Before analyzing anything, carefully examine the conversation context, especially the original problem statement and stated cause, to understand the user's specific terminology. Pay special attention to how terms are defined in their problem, but also use common sense. For example, if they mentioned "drinking alcohol" in their original problem, a subsequent reference to "drinking" should usually be understood as "drinking alcohol," unless the context clearly implies otherwise (e.g., "drinking water instead"). Apply this contextual understanding consistently throughout your analysis.
+
+Based on the following conversation about action planning for a user's cause, generate 3-4 specific, actionable plan options.
 
 Each action plan option should:
 - Be concrete and specific (not vague)
@@ -376,16 +393,122 @@ The JSON structure should be as follows:
   "conclusion": "An encouraging 2-3 sentence closing that empowers you to take action"
 }
 
-Return ONLY the JSON object, no additional text or formatting."""
+Return ONLY the JSON object, no additional text or formatting.""",
+
+  "fear_mitigation": {
+      "intros": [
+          "Fear is natural when facing change. The key is preparing for what might go wrong so you can act with confidence.",
+          "Smart planning means anticipating challenges. Let's build on your initial thoughts to create a comprehensive mitigation strategy.",
+          "Your initial mitigation thinking is a great start. Let's enhance it with additional strategies and backup plans.",
+          "Effective risk management means having multiple ways to handle obstacles. Let's expand your toolkit."
+      ],
+      "body": """Act as a critical friend analyzing the user's mitigation plan. Your job is to objectively evaluate their approach and provide superior strategies.
+
+**FULL CONTEXT YOU MUST ANALYZE:**
+- **Original Problem:** {{painPoint}}
+- **Contributing Cause:** {{contributingCause}}
+- **Action Plan:** {{actionPlan}}
+- **User's Fear/Concern:** {{fearName}}
+- **User's Mitigation Plan:** {{userMitigationInput}}
+
+**CRITICAL INSTRUCTION - CONTEXT-AWARE TERM INTERPRETATION:**
+Before analyzing anything, carefully examine the **Original Problem** and **Contributing Cause** to understand the user's specific context. Pay special attention to how terms are defined in their problem, but also use common sense. For example, if they mentioned "drinking alcohol" in their original problem, a subsequent reference to "drinking" should usually be understood as "drinking alcohol," unless the context clearly implies otherwise (e.g., "drinking water instead"). Apply this contextual understanding consistently throughout your analysis.
+
+**CRITICAL FRIEND EVALUATION PROCESS:**
+
+**STEP 1: Evaluate Their Plan**
+Critically assess if their mitigation plan '{{userMitigationInput}}' would realistically and effectively address '{{fearName}}' in the context of implementing '{{actionPlan}}' to solve '{{contributingCause}}'. Consider:
+- Does it directly counter the specific fear?
+- Is it practical given their situation?
+- Would it actually prevent or minimize the feared outcome?
+
+**STEP 2: Generate Response Based on Evaluation**
+
+**If their plan IS effective:**
+- Options 1-2: Provide concrete enhancements that make their existing approach more robust or comprehensive
+- Options 3-4: Suggest additional complementary strategies that work alongside their plan
+
+**If their plan IS NOT effective:**
+- Options 1-4: Provide superior alternative strategies that would better address this specific fear in their context
+
+**RESPONSE REQUIREMENTS:**
+- No validation, praise, or encouragement language
+- Objective, tactical analysis only
+- Each option must be specific to their exact situation
+- Focus on concrete, measurable actions
+- Never suggest extreme or impractical measures
+- Use varied, dynamic language - no formulaic phrasing
+- Each strategy should feel thoughtfully crafted for their unique context
+
+**CRITICAL:** Return ONLY valid JSON in this exact format:
+{
+  "mitigation_options": [
+    "First mitigation strategy tailored to their situation",
+    "Second mitigation strategy addressing their specific context",
+    "Third mitigation approach for this particular fear",
+    "Fourth tactical strategy for their exact scenario"
+  ]
 }
 
-async def get_claude_response(prompt: str) -> Dict[str, Any]:
+Each strategy should be 1-2 complete sentences providing concrete, actionable guidance specific to their fear and circumstances."""
+  },
+  
+  "fear_contingency": {
+      "intros": [
+          "Even with the best mitigation, sometimes things don't go as planned. Having backup plans builds confidence and resilience.",
+          "Contingency planning isn't pessimistic—it's smart. Let's create backup strategies so you're prepared for any scenario.",
+          "Your initial contingency thinking shows good preparation. Let's expand your options so you're ready for whatever comes up.",
+          "Strong contingency plans free you to take bold action, knowing you have alternatives if needed."
+      ],
+      "body": """Your goal is to help the user create confident backup plans assuming their fear '{{fearName}}' becomes reality despite their mitigation efforts.
+
+**FULL CONTEXT YOU MUST ANALYZE:**
+- **Original Problem:** {{painPoint}}
+- **Contributing Cause:** {{contributingCause}}
+- **Action Plan:** {{actionPlan}}
+- **User's Fear/Concern:** {{fearName}}
+- **User's Contingency Thinking:** {{userContingencyInput}}
+- **Selected Mitigation Strategies:** {{mitigationStrategies}}
+
+**CRITICAL INSTRUCTION - CONTEXT-AWARE TERM INTERPRETATION:**
+Before analyzing anything, carefully examine the **Original Problem** and **Contributing Cause** to understand the user's specific context. Pay special attention to how terms are defined in their problem, but also use common sense. For example, if they mentioned "drinking alcohol" in their original problem, a subsequent reference to "drinking" should usually be understood as "drinking alcohol," unless the context clearly implies otherwise (e.g., "drinking water instead"). Apply this contextual understanding consistently throughout your analysis.
+
+**SCENARIO:** Their mitigation didn't work, and '{{fearName}}' happened while implementing '{{actionPlan}}' to address '{{contributingCause}}'.
+
+**YOUR MISSION:**
+1. **Build on their contingency thinking** - Their idea '{{userContingencyInput}}' shows preparation. Expand it with concrete actions.
+2. **Address the worst-case scenario** - What specific steps if their fear fully manifests?
+3. **Maintain progress toward their goal** - Even if this setback occurs, how can they still address '{{contributingCause}}'?
+4. **Show resilience is possible** - Demonstrate that setbacks don't mean failure
+
+**GENERATE EXACTLY 4 BACKUP PLANS THAT:**
+- Extend their existing contingency thinking with specific actions
+- Provide alternative ways to continue progress if this fear happens
+- Are realistic responses to their specific feared outcome
+- Connect back to solving their original problem '{{painPoint}}'
+
+**CRITICAL:** Return ONLY valid JSON in this exact format:
+{
+  "contingency_options": [
+    "First specific backup plan building on their contingency thinking",
+    "Second specific recovery strategy if their fear manifests",
+    "Third specific alternative path to maintain progress",
+    "Fourth specific resilience action for this scenario"
+  ]
+}
+
+Each contingency should be 1-2 complete sentences providing a concrete, actionable backup plan specific to their fear happening in their exact situation."""
+  }
+}
+
+async def get_claude_response(prompt: str, temperature: float = 0.4, system_prompt: str = GUIDANCE_SYSTEM_PROMPT) -> Dict[str, Any]:
     """Get response from Claude API"""
     try:
         message = anthropic.messages.create(
             model="claude-3-haiku-20240307",
             max_tokens=1024,
-            system=SYSTEM_PROMPT,
+            system=system_prompt,
+            temperature=temperature,
             messages=[{"role": "user", "content": prompt}]
         )
         
@@ -403,6 +526,26 @@ def format_context_value(key: str, value: Any) -> str:
         return ''
     
     if key == 'painPoint':
+        return str(value) if isinstance(value, str) else ''
+    
+    elif key == 'contributingCause':
+        return str(value) if isinstance(value, str) else ''
+    
+    elif key == 'actionPlan':
+        return str(value) if isinstance(value, str) else ''
+    
+    elif key == 'fearName':
+        return str(value) if isinstance(value, str) else ''
+    
+    elif key == 'userMitigationInput':
+        return str(value) if isinstance(value, str) else ''
+    
+    elif key == 'userContingencyInput':
+        return str(value) if isinstance(value, str) else ''
+    
+    elif key == 'mitigationStrategies':
+        if isinstance(value, list):
+            return ', '.join([str(item) for item in value if item and str(item).strip()])
         return str(value) if isinstance(value, str) else ''
     
     elif key == 'causes':
@@ -749,7 +892,7 @@ The user has expressed uncertainty multiple times. Generate 4 diverse root cause
         
         root_cause_options = []
         try:
-            summary_response = await get_claude_response(summary_prompt)
+            summary_response = await get_claude_response(summary_prompt, system_prompt=OPTION_GENERATION_SYSTEM_PROMPT)
             summary_data = json.loads(summary_response['responseText'])
             root_cause_options = summary_data.get("root_cause_options", [])
             print(f"Generated root causes due to uncertainty: {root_cause_options}")
@@ -778,7 +921,7 @@ Generate 4 diverse root cause statements that dig deeper than the surface-level 
         
         root_cause_options = []
         try:
-            summary_response = await get_claude_response(summary_prompt)
+            summary_response = await get_claude_response(summary_prompt, system_prompt=OPTION_GENERATION_SYSTEM_PROMPT)
             summary_data = json.loads(summary_response['responseText'])
             root_cause_options = summary_data.get("root_cause_options", [])
             print(f"AI generated {len(root_cause_options)} root cause options: {root_cause_options}")
@@ -848,7 +991,7 @@ Generate 4 diverse root cause statements that dig deeper than the surface-level 
             
             root_cause_options = []
             try:
-                summary_response = await get_claude_response(summary_prompt)
+                summary_response = await get_claude_response(summary_prompt, system_prompt=OPTION_GENERATION_SYSTEM_PROMPT)
                 summary_data = json.loads(summary_response['responseText'])
                 root_cause_options = summary_data.get("root_cause_options", [])
                 
@@ -989,11 +1132,22 @@ Return only the question text, no other formatting."""
         "is_complete": False
     }
 
-async def get_next_action_planning_question(cause: str, history: List[str], is_contribution: bool = False, regenerate: bool = False, session_context: Dict[str, Any] = None) -> Dict[str, Any]:
+async def get_next_action_planning_question(
+    cause: str,
+    history: List[str],
+    is_contribution: bool = False,
+    regenerate: bool = False,
+    session_context: Dict[str, Any] = None,
+    generation_count: int = 0,
+    existing_plans: List[str] = None
+) -> Dict[str, Any]:
     """
     Determines the next question in the conversational action planning process.
     Enhanced with session context and input validation for better personalization.
     """
+    if existing_plans is None:
+        existing_plans = []
+
     # If regenerate is True or we have enough history (3 complete exchanges = 6 messages), generate action plan options
     if len(history) >= 6 or regenerate:
         # Input validation: Check if user responses are too vague
@@ -1031,8 +1185,58 @@ async def get_next_action_planning_question(cause: str, history: List[str], is_c
 
 This context should inform your suggestions to make them highly relevant to their specific situation.
 """
-        
-        action_planning_prompt = f"""You are an expert action planning coach. Generate 4 specific, actionable options to address this cause/contribution.
+
+        # Determine temperature based on generation count
+        if generation_count == 0:
+            temperature = 0.4
+        elif generation_count == 1:
+            temperature = 0.7
+        else:
+            temperature = 1.0
+
+        # Conditional prompt logic
+        if generation_count > 0:
+            existing_plans_text = "\n".join([f"- {plan}" for plan in existing_plans])
+            existing_plans_section = f"""**Previously Generated Action Plans (for context):**
+{existing_plans_text}
+"""
+            action_planning_prompt = f"""You are an expert action planning coach. Your task is to generate 4 new, specific, and actionable options to address the user's stated cause/contribution.
+
+**Cause/Contribution to Address:** "{cause}"
+{context_section}
+{existing_plans_section}
+**User's Planning Conversation:**
+{history_text}
+
+**Instructions:**
+- You MUST generate 4 NEW options that are distinct from the "Previously Generated Action Plans" listed above.
+- PRIORITIZE session context over conversation details to ensure suggestions are highly relevant and effective.
+- Focus on actions that directly address the specific cause while connecting to the user's broader situation.
+- If user responses were limited, rely more heavily on the session context.
+- Make actions specific to their actual situation, not generic advice.
+
+**Action Requirements:**
+- **NEW and DISTINCT:** Must not repeat or be minor variations of previously generated plans.
+- **EFFECTIVE and RELEVANT:** Must be a highly effective potential solution for the user's specific problem and causes.
+- **Concrete and specific:** (not generic advice)
+- **Directly address the stated cause/contribution:**
+- **Connect to their broader problem context when possible:**
+- **Include implementation details when possible:**
+- **Realistic and achievable:**
+
+Generate 4 new, diverse, and effective action options that are personalized to their situation.
+
+Return ONLY valid JSON:
+{{
+  "action_plan_options": [
+    "New, specific action option 1",
+    "New, specific action option 2",
+    "New, specific action option 3",
+    "New, specific action option 4"
+  ]
+}}"""
+        else:
+            action_planning_prompt = f"""You are an expert action planning coach. Generate 4 specific, actionable options to address this cause/contribution.
 
 **Cause/Contribution to Address:** "{cause}"
 {context_section}
@@ -1067,8 +1271,12 @@ Return ONLY valid JSON:
         
         action_plan_options = []
         try:
-            print(f"Sending prompt to AI: {action_planning_prompt}")
-            ai_result = await get_claude_response(action_planning_prompt)
+            print(f"Sending prompt to AI with temperature {temperature}: {action_planning_prompt}")
+            ai_result = await get_claude_response(
+                action_planning_prompt,
+                temperature=temperature,
+                system_prompt=OPTION_GENERATION_SYSTEM_PROMPT
+            )
             print(f"Raw AI response for action planning: {ai_result['responseText']}")
             
             # Try to extract JSON even if wrapped in markdown
@@ -1493,7 +1701,7 @@ async def get_ai_summary(user_id: str, session_id: str, session_data: Dict[str, 
         prompt = prompt.replace('{{' + key + '}}', str(value))
 
     try:
-        ai_result = await get_claude_response(prompt)
+        ai_result = await get_claude_response(prompt, system_prompt=OPTION_GENERATION_SYSTEM_PROMPT)
         
         # Try to parse JSON from the response
         try:
@@ -2030,6 +2238,129 @@ Return only the question text, no other formatting or explanation."""
         }
         questions = fallback_questions.get(focus_area, fallback_questions["foundational"])
         return questions[min(question_count - 1, len(questions) - 1)]
+
+async def get_fear_analysis_options(mitigation_plan: str, fear_context: dict = None):
+    """
+    Generate mitigation and contingency options for fear analysis
+    """
+    try:
+        # Extract context from fear_context and map to expected prompt keys
+        context = fear_context or {}
+        
+        # Build the request context with properly mapped keys for prompt replacement
+        request_context = {
+            "painPoint": context.get("painPoint", ""),
+            "contributingCause": context.get("contributingCause", ""),
+            "actionPlan": context.get("actionPlan", ""),
+            "fearName": context.get("fearName", ""),
+            "userMitigationInput": context.get("userMitigationInput", ""),
+            "userContingencyInput": context.get("userContingencyInput", ""),
+            "mitigationStrategies": context.get("mitigationStrategies", [])
+        }
+        
+        # Generate mitigation options using direct AI call
+        mitigation_prompt = PROMPTS["fear_mitigation"]["body"]
+        
+        # Replace placeholders in mitigation prompt
+        for key, value in request_context.items():
+            formatted_value = format_context_value(key, value)
+            mitigation_prompt = mitigation_prompt.replace('{{' + key + '}}', formatted_value)
+        
+        mitigation_ai_result = await get_claude_response(mitigation_prompt, system_prompt=OPTION_GENERATION_SYSTEM_PROMPT)
+        
+        # Generate contingency options using direct AI call
+        contingency_prompt = PROMPTS["fear_contingency"]["body"]
+        
+        # Replace placeholders in contingency prompt
+        for key, value in request_context.items():
+            formatted_value = format_context_value(key, value)
+            contingency_prompt = contingency_prompt.replace('{{' + key + '}}', formatted_value)
+        
+        contingency_ai_result = await get_claude_response(contingency_prompt, system_prompt=OPTION_GENERATION_SYSTEM_PROMPT)
+        
+        mitigation_options = []
+        contingency_options = []
+        
+        # Parse mitigation options from JSON response
+        if mitigation_ai_result and mitigation_ai_result.get("responseText"):
+            try:
+                # Clean up JSON response
+                response_text = mitigation_ai_result["responseText"].strip()
+                if response_text.startswith('```json'):
+                    response_text = response_text.replace('```json', '').replace('```', '').strip()
+                elif response_text.startswith('```'):
+                    response_text = response_text.replace('```', '').strip()
+                
+                mitigation_response = json.loads(response_text)
+                mitigation_options = mitigation_response.get("mitigation_options", [])
+                print(f"Successfully parsed {len(mitigation_options)} mitigation options")
+            except json.JSONDecodeError as e:
+                print(f"JSON parsing failed for mitigation options: {e}")
+                # Fallback to parsing the response text
+                mitigation_options = parse_ai_suggestions(mitigation_ai_result["responseText"])
+        
+        # Parse contingency options from JSON response
+        if contingency_ai_result and contingency_ai_result.get("responseText"):
+            try:
+                # Clean up JSON response
+                response_text = contingency_ai_result["responseText"].strip()
+                if response_text.startswith('```json'):
+                    response_text = response_text.replace('```json', '').replace('```', '').strip()
+                elif response_text.startswith('```'):
+                    response_text = response_text.replace('```', '').strip()
+                
+                contingency_response = json.loads(response_text)
+                contingency_options = contingency_response.get("contingency_options", [])
+                # Ensure we never return more than 4 contingency options
+                contingency_options = contingency_options[:4]
+                print(f"Successfully parsed {len(contingency_options)} contingency options")
+            except json.JSONDecodeError as e:
+                print(f"JSON parsing failed for contingency options: {e}")
+                # Fallback to parsing the response text
+                contingency_options = parse_ai_suggestions(contingency_ai_result["responseText"])
+        
+        print(f"Final result: {len(mitigation_options)} mitigation, {len(contingency_options)} contingency options")
+        
+        return {
+            "mitigation_options": mitigation_options,
+            "contingency_options": contingency_options
+        }
+        
+    except Exception as e:
+        print(f"Error in get_fear_analysis_options: {e}")
+        return {
+            "mitigation_options": [],
+            "contingency_options": []
+        }
+
+def parse_ai_suggestions(response_text: str) -> list:
+    """
+    Parse AI response text into a list of suggestions
+    Looks for numbered lists, bullet points, or line-separated items
+    """
+    if not response_text:
+        return []
+    
+    lines = response_text.strip().split('\n')
+    suggestions = []
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Remove common list prefixes
+        prefixes = ['1.', '2.', '3.', '4.', '5.', '-', '•', '*']
+        for prefix in prefixes:
+            if line.startswith(prefix):
+                line = line[len(prefix):].strip()
+                break
+        
+        # Only add substantial suggestions (more than just a few characters)
+        if len(line) > 10:
+            suggestions.append(line)
+    
+    return suggestions[:5]  # Limit to 5 suggestions
 
 # Create a simple AIService class for the routes to use
 class AIService:

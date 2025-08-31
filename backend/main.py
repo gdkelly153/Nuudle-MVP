@@ -24,9 +24,9 @@ except ImportError:
 
 # Import AI service functions - hybrid import for local/production compatibility
 try:
-    from backend.ai_service import get_ai_response, get_ai_summary, analyze_self_awareness, generate_action_options, refine_action, get_next_action_planning_question, get_next_cause_analysis_question
+    from backend.ai_service import get_ai_response, get_ai_summary, analyze_self_awareness, generate_action_options, refine_action, get_next_action_planning_question, get_next_cause_analysis_question, get_fear_analysis_options
 except ImportError:
-    from ai_service import get_ai_response, get_ai_summary, analyze_self_awareness, generate_action_options, refine_action, get_next_action_planning_question, get_next_cause_analysis_question
+    from ai_service import get_ai_response, get_ai_summary, analyze_self_awareness, generate_action_options, refine_action, get_next_action_planning_question, get_next_cause_analysis_question, get_fear_analysis_options
 
 app = FastAPI()
 
@@ -155,8 +155,10 @@ class ActionPlanRequest(BaseModel):
     isContribution: bool = False
     history: List[str] = []
     regenerate: bool = False
-    include_session_context: bool = True  # New flag to enable enhanced context
-    frontend_session_context: Optional[Dict[str, Any]] = None  # Accept session context from frontend
+    include_session_context: bool = True
+    frontend_session_context: Optional[Dict[str, Any]] = None
+    generation_count: int = 0
+    existing_plans: Optional[List[str]] = None
 
 class ActionPlanResponse(BaseModel):
     success: bool
@@ -184,6 +186,16 @@ class ActionRefinementRequest(BaseModel):
 class ActionRefinementResponse(BaseModel):
     success: bool
     refinedAction: Optional[str] = None
+    error: Optional[str] = None
+
+class FearAnalysisRequest(BaseModel):
+    mitigation_plan: str
+    fear_context: Optional[Dict[str, Any]] = None
+
+class FearAnalysisResponse(BaseModel):
+    success: bool
+    mitigation_options: Optional[List[str]] = []
+    contingency_options: Optional[List[str]] = []
     error: Optional[str] = None
 
 # Session Models
@@ -600,11 +612,13 @@ async def plan_action(session_id: str, request: ActionPlanRequest, current_reque
                 # Continue without session context rather than fail
 
         result = await get_next_action_planning_question(
-            request.cause,
-            request.history,
-            request.isContribution,
-            request.regenerate,
-            session_context
+            cause=request.cause,
+            history=request.history,
+            is_contribution=request.isContribution,
+            regenerate=request.regenerate,
+            session_context=session_context,
+            generation_count=request.generation_count,
+            existing_plans=request.existing_plans
         )
 
         return ActionPlanResponse(
@@ -858,4 +872,38 @@ async def adaptive_cause_analysis(request: AdaptiveCauseAnalysisRequest):
         return AdaptiveCauseAnalysisResponse(
             success=False,
             error=f"Adaptive cause analysis failed: {str(e)}"
+        )
+
+@app.post("/api/ai/fear-analysis", response_model=FearAnalysisResponse)
+async def fear_analysis(request: FearAnalysisRequest, current_request: Request):
+    """
+    Generate mitigation and contingency options for fear analysis
+    """
+    # Get current user (optional for compatibility)
+    current_user = await get_current_user(current_request)
+    
+    try:
+        if not request.mitigation_plan.strip():
+            return FearAnalysisResponse(
+                success=False,
+                error="Mitigation plan cannot be empty"
+            )
+        
+        # Use the new fear analysis function
+        result = await get_fear_analysis_options(
+            mitigation_plan=request.mitigation_plan,
+            fear_context=request.fear_context or {}
+        )
+        
+        return FearAnalysisResponse(
+            success=True,
+            mitigation_options=result.get("mitigation_options", []),
+            contingency_options=result.get("contingency_options", [])
+        )
+        
+    except Exception as e:
+        print(f"Fear analysis error: {e}")
+        return FearAnalysisResponse(
+            success=False,
+            error=f"Fear analysis failed: {str(e)}"
         )

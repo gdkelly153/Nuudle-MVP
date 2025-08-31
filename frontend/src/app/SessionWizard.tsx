@@ -13,6 +13,7 @@ import {
 } from "@/components/AIComponents";
 import { CauseAnalysisModal } from "@/components/CauseAnalysisModal";
 import { ActionPlanningModal } from "@/components/ActionPlanningModal";
+import { FearsAnalysisModal } from "@/components/FearsAnalysisModal";
 import { AIAssistantProvider, useAIAssistant, type ChatMessage } from "@/contexts/AIAssistantContext";
 import { useSummaryDownloader, type SummaryData, type SessionData } from "@/hooks/useSummaryDownloader";
 
@@ -27,7 +28,7 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
   const [step, setStep] = useState(0);
   const [showGuidanceHint, setShowGuidanceHint] = useState(false);
   const [guidanceHintShownCount, setGuidanceHintShownCount] = useState(0);
-  const [causes, setCauses] = useState([{ id: "cause-0", cause: "" }]);
+  const [causes, setCauses] = useState([{ id: "cause-0", cause: "", isRootCause: false }]);
   const [solutions, setSolutions] = useState<{ [id: string]: string[] }>({});
   const [causesSubmitted, setCausesSubmitted] = useState(false);
   const [playCauseAnimation, setPlayCauseAnimation] = useState(false);
@@ -35,7 +36,7 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
   const [perpetuations, setPerpetuations] = useState<{ id: number; text: string }[]>([{ id: 1, text: "" }]);
   const [step2Phase, setStep2Phase] = useState<"input" | "selection">("input");
   const [selectedPerpetuations, setSelectedPerpetuations] = useState<string[]>([]);
-  const [fears, setFears] = useState<{ [id: string]: { name: string; mitigation: string; contingency: string } }>({});
+  const [fears, setFears] = useState<{ [id: string]: { risk: string; mitigation: string; contingency: string } }>({});
   const [openFearSections, setOpenFearSections] = useState<string[]>([]);
   const [notWorried, setNotWorried] = useState(false);
   const [suggestedCauses, setSuggestedCauses] = useState<string[]>([]);
@@ -51,11 +52,13 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
   const [sessionSaved, setSessionSaved] = useState(false);
   const [analyzingCauseId, setAnalyzingCauseId] = useState<string | null>(null);
   const [causeAnalysisHistories, setCauseAnalysisHistories] = useState<{ [causeId: string]: ChatMessage[] }>({});
-  const [analyzedCauseIds, setAnalyzedCauseIds] = useState<string[]>([]);
   
   // State for action planning modal
   const [planningActionId, setPlanningActionId] = useState<string | null>(null);
   const [actionPlanningHistories, setActionPlanningHistories] = useState<{ [actionId: string]: ChatMessage[] }>({});
+  
+  // State for fears analysis modal
+  const [fearsAnalysisActionId, setFearsAnalysisActionId] = useState<string | null>(null);
   
   // State for cause exchange workflow
   const [showCauseExchangeModal, setShowCauseExchangeModal] = useState(false);
@@ -118,12 +121,14 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
             combinedCauses.push({
               id: `cause-${combinedCauses.length}`,
               cause: causesData.primary_cause,
+              isRootCause: false,
             });
           }
           causesData.sub_causes?.forEach((cause: string) => {
             combinedCauses.push({
               id: `cause-${combinedCauses.length}`,
               cause,
+              isRootCause: false,
             });
           });
 
@@ -157,11 +162,16 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
         if (fearsParam) {
           const fearsData = JSON.parse(decodeURIComponent(fearsParam));
           if (fearsData.length > 0) {
-            const fearsObj: { [id: string]: { name: string; mitigation: string; contingency: string } } = {};
+            const fearsObj: { [id: string]: { risk: string; mitigation: string; contingency: string } } = {};
             const openSections: string[] = [];
             fearsData.forEach((fear: any, index: number) => {
               const fearId = `cause-${index}`;
-              fearsObj[fearId] = fear;
+              // Convert from old format if needed
+              fearsObj[fearId] = {
+                risk: fear.risk || fear.name || '',
+                mitigation: fear.mitigation || '',
+                contingency: fear.contingency || ''
+              };
               openSections.push(fearId);
             });
             setFears(fearsObj);
@@ -228,7 +238,7 @@ function SessionWizardContent({ sessionId }: { sessionId: string }) {
       const causeItems: ActionableItem[] = causes
         .filter(c => c.cause.trim() !== "")
         .map((c, index) => ({
-          id: `cause-${index}`,
+          id: c.id,
           cause: c.cause,
         }));
 
@@ -472,10 +482,14 @@ useEffect(() => {
   const nextStep = async () => {
     // Special handling when moving from Step 1 (Contributing Causes)
     if (step === 1) {
-      const filteredCauses = causes.filter(c => c.cause.trim() !== "").map(c => c.cause);
+      const filteredCauses = causes.filter(c => c.cause.trim() !== "");
+      const causeTexts = filteredCauses.map(c => c.cause);
       
-      if (filteredCauses.length > 0) {
-        const selfAwarenessResult = await analyzeSelfAwareness(filteredCauses);
+      if (causeTexts.length > 0) {
+        // Update the causes state with only the non-empty ones
+        setCauses(filteredCauses);
+        
+        const selfAwarenessResult = await analyzeSelfAwareness(causeTexts);
         setSelfAwarenessDetected(selfAwarenessResult);
         
         if (selfAwarenessResult) {
@@ -488,6 +502,10 @@ useEffect(() => {
           setStep(2);
           return;
         }
+      } else {
+        // If all causes are empty, don't proceed and optionally show a message
+        // For now, we'll just stay on the same step.
+        return;
       }
     }
     
@@ -514,7 +532,8 @@ useEffect(() => {
 
   const addCause = (causeText = "") => {
     if (causes.length < 5) {
-      setCauses([...causes, { id: `cause-${causes.length}`, cause: causeText }]);
+      const newId = `cause-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+      setCauses([...causes, { id: newId, cause: causeText, isRootCause: false }]);
     }
   };
 
@@ -613,7 +632,7 @@ useEffect(() => {
       if (newOpenFears.includes(id) && !fears[id]) {
         setFears(prevFears => ({
           ...prevFears,
-          [id]: { name: "", mitigation: "", contingency: "" }
+          [id]: { risk: "", mitigation: "", contingency: "" }
         }));
       }
       
@@ -628,7 +647,7 @@ useEffect(() => {
 
   const handleFearChange = (
     id: string,
-    field: "name" | "mitigation" | "contingency",
+    field: "risk" | "mitigation" | "contingency",
     value: string
   ) => {
     setFears(prev => ({
@@ -683,26 +702,27 @@ useEffect(() => {
       const newCauses = [...causes];
       const newlyAnalyzedIds = [analyzingCauseId]; // Track all affected causes
       
-      // Replace the original cause with the first selection
+      // Replace the original cause with the first selection and mark as root cause
       const causeIndex = newCauses.findIndex(c => c.id === analyzingCauseId);
       if (causeIndex !== -1) {
-        newCauses[causeIndex] = { ...newCauses[causeIndex], cause: selections[0] };
+        newCauses[causeIndex] = { ...newCauses[causeIndex], cause: selections[0], isRootCause: true };
       }
 
-      // Add additional selections as new causes
+      // Add additional selections as new causes with guaranteed unique IDs
       for (let i = 1; i < selections.length; i++) {
-        const newId = `cause-${newCauses.length}`;
+        const timestamp = Date.now();
+        const randomSuffix = Math.random().toString(36).substr(2, 5);
+        const newId = `cause-${timestamp}-${randomSuffix}`;
         newCauses.push({
           id: newId,
-          cause: selections[i]
+          cause: selections[i],
+          isRootCause: true
         });
         newlyAnalyzedIds.push(newId); // Track the new cause as analyzed
       }
 
       setCauses(newCauses);
       
-      // Mark all affected causes as analyzed
-      setAnalyzedCauseIds(prev => [...new Set([...prev, ...newlyAnalyzedIds])]);
     } else {
       // We need to show the cause exchange modal
       setPendingSelections({
@@ -758,36 +778,28 @@ useEffect(() => {
     setPlanningActionId(null);
   };
 
+  const handleFearsAnalysis = (actionId: string, answers?: { risk: string; mitigation: string; contingency: string }) => {
+    if (answers) {
+      setFears(prev => ({
+        ...prev,
+        [actionId]: answers
+      }));
+    }
+    
+    setFearsAnalysisActionId(null);
+  };
+
   const handleBack = () => {
     prevStep();
   };
 
-  const cleanupAndProceed = (
-    items: any[],
-    setItems: React.Dispatch<React.SetStateAction<any[]>>,
-    proceedAction: () => void
-  ) => {
-    const cleanedItems = items.filter((item) => {
-      if (typeof item === "string") {
-        return item.trim() !== "";
-      }
-      if (typeof item === "object" && item !== null) {
-        return Object.values(item).some((value) =>
-          typeof value === "string" ? value.trim() !== "" : false
-        );
-      }
-      return true;
-    });
-    setItems(cleanedItems.length > 0 ? cleanedItems : items);
-    proceedAction();
-  };
 
   // Helper function to clean up empty inputs before AI requests
   const cleanupEmptyInputs = () => {
     // Clean up causes
     const filteredCauses = causes.filter((c) => c.cause.trim() !== "");
     if (filteredCauses.length !== causes.length) {
-      setCauses(filteredCauses.length > 0 ? filteredCauses : [{ id: "cause-0", cause: "" }]);
+      setCauses(filteredCauses.length > 0 ? filteredCauses : [{ id: "cause-0", cause: "", isRootCause: false }]);
     }
 
     // Clean up perpetuations
@@ -809,7 +821,7 @@ useEffect(() => {
     // Clean up fears (remove empty fear entries)
     const filteredFears = Object.fromEntries(
       Object.entries(fears).filter(([_, fear]) =>
-        fear.name.trim() !== "" || fear.mitigation.trim() !== "" || fear.contingency.trim() !== ""
+        fear.risk.trim() !== "" || fear.mitigation.trim() !== "" || fear.contingency.trim() !== ""
       )
     );
     if (Object.keys(filteredFears).length !== Object.keys(fears).length) {
@@ -817,7 +829,7 @@ useEffect(() => {
       // Also update open fear sections to only include those with content
       setOpenFearSections(prev =>
         prev.filter(id => filteredFears[id] &&
-          (filteredFears[id].name.trim() !== "" ||
+          (filteredFears[id].risk.trim() !== "" ||
            filteredFears[id].mitigation.trim() !== "" ||
            filteredFears[id].contingency.trim() !== "")
         )
@@ -852,8 +864,12 @@ useEffect(() => {
         .filter((perpetuation) => perpetuation.trim() !== ""),
       solutions: Object.values(solutions).flat().filter((solution) => solution.trim() !== ""),
       fears: Object.values(fears).filter(
-        (fear) => fear.name.trim() !== "" || fear.mitigation.trim() !== "" || fear.contingency.trim() !== ""
-      ),
+        (fear) => fear.risk.trim() !== "" || fear.mitigation.trim() !== "" || fear.contingency.trim() !== ""
+      ).map(fear => ({
+        name: fear.risk, // Convert back to expected format for backend
+        mitigation: fear.mitigation,
+        contingency: fear.contingency
+      })),
       action_plan:
         actionPlan.selectedActionIds.includes("other")
           ? actionPlan.otherActionText
@@ -902,8 +918,12 @@ useEffect(() => {
           .filter((perpetuation) => perpetuation.trim() !== ""),
         solutions: Object.values(solutions).flat().filter((solution) => solution.trim() !== ""),
         fears: Object.values(fears).filter(
-          (fear) => fear.name.trim() !== "" || fear.mitigation.trim() !== "" || fear.contingency.trim() !== ""
-        ),
+          (fear) => fear.risk.trim() !== "" || fear.mitigation.trim() !== "" || fear.contingency.trim() !== ""
+        ).map(fear => ({
+          name: fear.risk, // Convert back to expected format for backend
+          mitigation: fear.mitigation,
+          contingency: fear.contingency
+        })),
         action_plan:
           actionPlan.selectedActionIds.includes("other")
             ? actionPlan.otherActionText
@@ -963,8 +983,12 @@ useEffect(() => {
         .filter((perpetuation) => perpetuation.trim() !== ""),
       solutions: Object.values(solutions).flat().filter((solution) => solution.trim() !== ""),
       fears: Object.values(fears).filter(
-        (fear) => fear.name.trim() !== "" || fear.mitigation.trim() !== "" || fear.contingency.trim() !== ""
-      ),
+        (fear) => fear.risk.trim() !== "" || fear.mitigation.trim() !== "" || fear.contingency.trim() !== ""
+      ).map(fear => ({
+        name: fear.risk, // Convert back to expected format for backend
+        mitigation: fear.mitigation,
+        contingency: fear.contingency
+      })),
       action_plan:
         actionPlan.selectedActionIds.includes("other")
           ? actionPlan.otherActionText
@@ -1024,22 +1048,8 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
           painPoint={painPoint}
           onClose={(selections: string[]) => {
             if (selections.length > 0) {
-              const currentCausesLength = causes.length;
-              
-              // Handle root cause selections first
+              // Handle root cause selections - this function will manage analyzedCauseIds internally
               handleRootCauseSelections(analyzingCauseId!, selections);
-              
-              // Mark all affected causes as analyzed
-              setAnalyzedCauseIds(prev => {
-                const newAnalyzedIds = [...prev, analyzingCauseId!]; // Original cause
-                
-                // Add IDs for any new causes that will be created from additional selections
-                for (let i = 1; i < selections.length; i++) {
-                  newAnalyzedIds.push(`cause-${currentCausesLength + i - 1}`);
-                }
-                
-                return [...new Set(newAnalyzedIds)]; // Remove duplicates
-              });
             }
             setAnalyzingCauseId(null);
           }}
@@ -1057,9 +1067,21 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
             causes: causes.filter(c => c.cause.trim() !== '').map(c => c.cause),
             perpetuations: perpetuations.filter(p => selectedPerpetuations.includes(String(p.id))).map(p => p.text),
             solutions: Object.values(solutions).flat().filter(s => s.trim() !== ''),
-            fears: Object.values(fears).filter(f => f.name.trim() !== '' || f.mitigation.trim() !== '' || f.contingency.trim() !== '')
+            fears: Object.values(fears).filter(f => f.risk.trim() !== '' || f.mitigation.trim() !== '' || f.contingency.trim() !== '')
           }}
           onClose={(finalActions) => handleActionPlanning(planningActionId, finalActions)}
+        />
+      )}
+      
+      {fearsAnalysisActionId && (
+        <FearsAnalysisModal
+          actionId={fearsAnalysisActionId}
+          actionText={Object.entries(solutions).flatMap(([id, actions]) =>
+            actions.map((action, index) => ({ id: `${id}-${index}`, action }))
+          ).find(item => item.id === fearsAnalysisActionId)?.action || ''}
+          painPoint={painPoint}
+          contributingCause={actionableItems.find(item => item.id === fearsAnalysisActionId)?.cause || ''}
+          onClose={(answers) => handleFearsAnalysis(fearsAnalysisActionId, answers)}
         />
       )}
       <style>{`
@@ -1323,7 +1345,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
                         </button>
                       </div>
                     )}
-                    {causesSubmitted && !analyzedCauseIds.includes(item.id) && (
+                    {causesSubmitted && !item.isRootCause && (
                       <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '0.5rem' }}>
                         <div style={{ position: 'relative', zIndex: 10 }} className={playCauseAnimation ? 'pulse-once' : ''}>
                           <AIAssistButton
@@ -1342,7 +1364,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
                         </div>
                       </div>
                     )}
-                    {causesSubmitted && analyzedCauseIds.includes(item.id) && (
+                    {causesSubmitted && item.isRootCause && (
                       <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '0.5rem' }}>
                         <div style={{ position: 'relative', zIndex: 10 }}>
                           <div className="target-icon-wrapper">
@@ -1370,13 +1392,13 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
             )}
             <Tooltip
               text={causesSubmitted ? "Proceed to the next step" : "Submit your causes to enable AI analysis"}
-              isDisabled={!(step === 1 && (causes.length > 0 && causes[0].cause.trim() !== ""))}
+              isDisabled={step === 1 && !(causes.length > 0 && causes[0].cause.trim() !== "")}
             >
               <button
                 type="button"
                 onClick={() => {
                   if (causesSubmitted) {
-                    cleanupAndProceed(causes, setCauses, nextStep);
+                    nextStep();
                   } else {
                     // Filter out empty causes when submitting
                     const filteredCauses = causes.filter(c => c.cause.trim() !== "");
@@ -1521,7 +1543,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
               </label>
               
               {/* Root Causes Section */}
-              {actionableItems.filter(item => !item.id.startsWith('perp-') && analyzedCauseIds.includes(item.id)).length > 0 && (
+              {actionableItems.filter(item => !item.id.startsWith('perp-') && causes.find(c => c.id === item.id)?.isRootCause).length > 0 && (
                 <>
                   <h4 style={{ display: 'block', margin: '0.5rem 0 0.5rem 0', fontSize: '1.1rem', color: 'var(--text-primary)', textAlign: 'center', fontWeight: '600' }}>
                     Root Causes
@@ -1530,7 +1552,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
                     These causes have been validated by first principles analysis and are more likely to be the primary drivers of the issue.
                   </p>
                   <div className="items-container">
-                    {actionableItems.filter(item => !item.id.startsWith('perp-') && analyzedCauseIds.includes(item.id)).map((item) => {
+                    {actionableItems.filter(item => !item.id.startsWith('perp-') && causes.find(c => c.id === item.id)?.isRootCause).map((item) => {
                       const isContribution = item.id.startsWith('perp-');
                       const hasActions = solutions[item.id] && solutions[item.id].length > 0 && solutions[item.id].some(action => action.trim() !== '');
                       
@@ -1664,7 +1686,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
               )}
               
               {/* Contributing Causes Section */}
-              {actionableItems.filter(item => item.id.startsWith('perp-') || !analyzedCauseIds.includes(item.id)).length > 0 && (
+              {actionableItems.filter(item => item.id.startsWith('perp-') || !causes.find(c => c.id === item.id)?.isRootCause).length > 0 && (
                 <>
                   <h4 style={{ display: 'block', marginTop: '1.5rem', marginBottom: '0.5rem', fontSize: '1.1rem', color: 'var(--text-primary)', textAlign: 'center', fontWeight: '600' }}>
                     Contributing Causes
@@ -1673,7 +1695,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
                    These causes have not been validated by root cause analysis and are less likely to be the primary drivers of the issue.
                  </p>
                  <div className="items-container">
-                    {actionableItems.filter(item => item.id.startsWith('perp-') || !analyzedCauseIds.includes(item.id)).map((item) => {
+                    {actionableItems.filter(item => item.id.startsWith('perp-') || !causes.find(c => c.id === item.id)?.isRootCause).map((item) => {
                       const isContribution = item.id.startsWith('perp-');
                       const hasActions = solutions[item.id] && solutions[item.id].length > 0 && solutions[item.id].some(action => action.trim() !== '');
                       
@@ -1841,80 +1863,170 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
         {/* Step 4: Fears */}
         <div className={getStepClass(4)} ref={(el) => { stepRefs.current[4] = el; }}>
           <h1 ref={(el) => { headerRefs.current[4] = el; }}>What worries you?</h1>
-          <p className="step-description">Select each action that you're hesitant about taking, then complete the fear, mitigation, and contingency prompts to build your confidence.</p>
           <div className="form-content initial-form-content">
-            <div className="items-container">
-              {Object.entries(solutions).flatMap(([id, actions]) =>
-                actions.map((action, index) => ({ id: `${id}-${index}`, action }))
-              ).map(({ id, action }) => (
-                <div key={id} className="actionable-item-container">
-                  <div
-                    className={`selectable-box ${openFearSections.includes(id) ? "selected" : ""}`}
-                    onClick={() => handleFearSelection(id)}
-                  >
-                    <div className="item-text">{action}</div>
-                  </div>
-                  {openFearSections.includes(id) && fears[id] && (
-                    <div className="fear-analysis-container">
-                      <button type="button" className="delete-item-button" onClick={() => removeFearAction(id)} disabled={step !== 4}>
-                        &times;
-                      </button>
-                      <div>
-                        <label className="input-label">If you take this action, what could go wrong?</label>
-                        <textarea
-                          ref={el => {
-                            const refs = fearTextareaRefs.current.get(id) || { name: null, mitigation: null, contingency: null };
-                            fearTextareaRefs.current.set(id, { ...refs, name: el });
-                          }}
-                          value={fears[id]?.name || ""}
-                          onChange={(e) => {
-                            handleFearChange(id, "name", e.target.value);
-                            ai.clearResponseForStage('action_planning');
-                          }}
-                          onInput={(e) => syncTextareaHeights(e)}
-                          className="auto-resizing-textarea"
-                          disabled={step !== 4}
-                        />
-                      </div>
-                      <div>
-                        <label className="input-label">What action could you take to try and prevent that from happening?</label>
-                        <textarea
-                          ref={el => {
-                            const refs = fearTextareaRefs.current.get(id) || { name: null, mitigation: null, contingency: null };
-                            fearTextareaRefs.current.set(id, { ...refs, mitigation: el });
-                          }}
-                          value={fears[id].mitigation}
-                          onChange={(e) => {
-                            handleFearChange(id, "mitigation", e.target.value);
-                            ai.clearResponseForStage('action_planning');
-                          }}
-                          onInput={(e) => syncTextareaHeights(e)}
-                          className="auto-resizing-textarea"
-                          disabled={step !== 4}
-                        />
-                      </div>
-                      <div>
-                        <label className="input-label">If your fear comes true, what would you do to move forward?</label>
-                        <textarea
-                          ref={el => {
-                            const refs = fearTextareaRefs.current.get(id) || { name: null, mitigation: null, contingency: null };
-                            fearTextareaRefs.current.set(id, { ...refs, contingency: el });
-                          }}
-                          value={fears[id].contingency}
-                          onChange={(e) => {
-                            handleFearChange(id, "contingency", e.target.value);
-                            ai.clearResponseForStage('action_planning');
-                          }}
-                          onInput={(e) => syncTextareaHeights(e)}
-                          className="auto-resizing-textarea"
-                          disabled={step !== 4}
-                        />
+            <div className="input-group">
+              <label className="step-description">
+                Click the 'Help me process my concerns' button for each action you want to address below.
+              </label>
+              
+              <div className="items-container">
+                {Object.entries(solutions).flatMap(([id, actions]) =>
+                  actions.map((action, index) => ({ id: `${id}-${index}`, action }))
+                ).map(({ id, action }) => {
+                  const hasFearsData = fears[id] && (fears[id].risk.trim() !== '' || fears[id].mitigation.trim() !== '' || fears[id].contingency.trim() !== '');
+                  
+                  return hasFearsData ? (
+                    <div key={id}>
+                      {/* Parent container with border when fears data exists */}
+                      <div className="cause-action-container" style={{
+                        border: '1px solid var(--golden-mustard)',
+                        borderRadius: '12px',
+                        padding: '1rem',
+                        backgroundColor: 'var(--bg-primary)'
+                      }}>
+                        {/* Action Display */}
+                        <div className="deletable-item-container" style={{ marginBottom: '1rem' }}>
+                          <textarea
+                            className="auto-resizing-textarea"
+                            value={action}
+                            readOnly
+                            style={{
+                              background: 'var(--bg-secondary)',
+                              cursor: 'default',
+                              textAlign: 'center',
+                              paddingLeft: '1.25em',
+                              paddingRight: '1.25em'
+                            }}
+                          />
+                        </div>
+                        
+                        {/* Fears Analysis Results Section */}
+                        <div>
+                          <div style={{ marginBottom: '0.5rem' }}>
+                            <label className="item-label" style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                              Risk
+                            </label>
+                            <textarea
+                              ref={el => {
+                                const refs = fearTextareaRefs.current.get(id) || { name: null, mitigation: null, contingency: null };
+                                fearTextareaRefs.current.set(id, { ...refs, name: el });
+                              }}
+                              value={fears[id]?.risk || ''}
+                              onChange={(e) => {
+                                handleFearChange(id, "risk", e.target.value);
+                              }}
+                              onInput={(e) => syncTextareaHeights(e)}
+                              className="auto-resizing-textarea"
+                              placeholder="What could go wrong?"
+                              disabled={step !== 4}
+                              style={{
+                                background: 'var(--bg-secondary)',
+                                borderColor: 'var(--refined-balance-teal)',
+                                boxShadow: '0 0 0 1px var(--refined-balance-teal-light)',
+                                textAlign: 'center',
+                                paddingLeft: '1.25em',
+                                paddingRight: '1.25em'
+                              }}
+                            />
+                          </div>
+                          
+                          <div style={{ marginBottom: '0.5rem' }}>
+                            <label className="item-label" style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                              Mitigation
+                            </label>
+                            <textarea
+                              ref={el => {
+                                const refs = fearTextareaRefs.current.get(id) || { name: null, mitigation: null, contingency: null };
+                                fearTextareaRefs.current.set(id, { ...refs, mitigation: el });
+                              }}
+                              value={fears[id]?.mitigation || ''}
+                              onChange={(e) => {
+                                handleFearChange(id, "mitigation", e.target.value);
+                              }}
+                              onInput={(e) => syncTextareaHeights(e)}
+                              className="auto-resizing-textarea"
+                              placeholder="How to prevent it?"
+                              disabled={step !== 4}
+                              style={{
+                                background: 'var(--bg-secondary)',
+                                borderColor: 'var(--refined-balance-teal)',
+                                boxShadow: '0 0 0 1px var(--refined-balance-teal-light)',
+                                textAlign: 'center',
+                                paddingLeft: '1.25em',
+                                paddingRight: '1.25em'
+                              }}
+                            />
+                          </div>
+                          
+                          <div style={{ marginBottom: '0' }}>
+                            <label className="item-label" style={{ display: 'block', marginBottom: '4px', fontSize: '0.875rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                              Contingency
+                            </label>
+                            <textarea
+                              ref={el => {
+                                const refs = fearTextareaRefs.current.get(id) || { name: null, mitigation: null, contingency: null };
+                                fearTextareaRefs.current.set(id, { ...refs, contingency: el });
+                              }}
+                              value={fears[id]?.contingency || ''}
+                              onChange={(e) => {
+                                handleFearChange(id, "contingency", e.target.value);
+                              }}
+                              onInput={(e) => syncTextareaHeights(e)}
+                              className="auto-resizing-textarea"
+                              placeholder="What to do if it happens?"
+                              disabled={step !== 4}
+                              style={{
+                                background: 'var(--bg-secondary)',
+                                borderColor: 'var(--refined-balance-teal)',
+                                boxShadow: '0 0 0 1px var(--refined-balance-teal-light)',
+                                textAlign: 'center',
+                                paddingLeft: '1.25em',
+                                paddingRight: '1.25em'
+                              }}
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  )}
-                </div>
-              ))}
+                  ) : (
+                    /* Structure matching Steps 1 and 3 for consistent spacing */
+                    <div key={id} className="deletable-item-container">
+                      {/* Action Display */}
+                      <textarea
+                        className="auto-resizing-textarea"
+                        value={action}
+                        readOnly
+                        style={{
+                          background: 'var(--bg-secondary)',
+                          cursor: 'default',
+                          textAlign: 'center',
+                          paddingLeft: '1.25em',
+                          paddingRight: '1.25em'
+                        }}
+                      />
+                      
+                      {/* Help me process my concerns Button */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '0.5rem' }}>
+                        <div style={{ position: 'relative', zIndex: 10 }}>
+                          <AIAssistButton
+                            stage="action_planning"
+                            customButtonText="Help me process my concerns"
+                            isLoading={fearsAnalysisActionId === id}
+                            onRequest={() => setFearsAnalysisActionId(id)}
+                            disabled={step !== 4 || !action.trim()}
+                            sessionId={sessionId}
+                            context={{ action }}
+                            currentStep={step}
+                            buttonStep={4}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
+            
             <div className="flex items-center mt-4">
               <input
                 type="checkbox"
@@ -1928,53 +2040,29 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
                 I'm not worried about taking any of these actions
               </label>
             </div>
-            <div className="ai-button-container mt-2">
-              <AIAssistButton
-                stage="action_planning"
-                isLoading={ai.loadingStage === 'action_planning'}
-                onRequest={() => {
-                  ai.requestAssistance("action_planning", Object.values(solutions).flat().join(', '), { painPoint, causes, perpetuations: selectedPerpetuations, solutions, fears });
-                }}
-                disabled={(Object.keys(fears).length === 0 && !notWorried) || !ai.canUseAI('action_planning')}
-                sessionId={sessionId}
-                context={{ solutions, fears }}
-                currentStep={step}
-                buttonStep={4}
-              />
-            </div>
           </div>
           <div className="button-container" style={{ marginTop: '1rem' }}>
             <button type="button" onClick={prevStep} disabled={step !== 4}>
               Back
             </button>
-            <Tooltip text="Attempt the prompt to proceed." isDisabled={step === 4 && (!notWorried && !Object.values(fears).some((fear) => fear.name.trim() !== "" && fear.mitigation.trim() !== "" && fear.contingency.trim() !== ""))}>
+            <Tooltip text="Process your concerns or check the 'not worried' option to proceed." isDisabled={step === 4 && (!notWorried && !Object.values(fears).some((fear) => fear.risk.trim() !== "" && fear.mitigation.trim() !== "" && fear.contingency.trim() !== ""))}>
               <button
                 type="button"
                 onClick={nextStep}
-                disabled={step !== 4 || (!notWorried && !Object.values(fears).some((fear) => fear.name.trim() !== "" && fear.mitigation.trim() !== "" && fear.contingency.trim() !== ""))}
+                disabled={step !== 4 || (!notWorried && !Object.values(fears).some((fear) => fear.risk.trim() !== "" && fear.mitigation.trim() !== "" && fear.contingency.trim() !== ""))}
               >
                 Next
               </button>
             </Tooltip>
           </div>
-          {ai.error && <AIErrorCard error={ai.error} onDismiss={ai.dismissResponse} />}
-          {ai.getCurrentResponse() && step === 4 && (
-            <AIResponseCard
-              response={ai.getCurrentResponse()!}
-              stage="action_planning"
-              onDismiss={ai.dismissResponse}
-              onFeedback={ai.provideFeedback}
-              canFollowUp={ai.canUseAI('action_planning')}
-            />
-          )}
         </div>
 
         {/* Step 5: Action Plan */}
         <div className={getStepClass(5)} ref={(el) => { stepRefs.current[5] = el; }}>
-          <h1 ref={(el) => { headerRefs.current[5] = el; }}>Question. Understand. <span style={{ color: 'var(--refined-balance-teal)' }}>Act</span></h1>
+          <h1 ref={(el) => { headerRefs.current[5] = el; }}>What will you do about it?</h1>
           <div className="form-content initial-form-content">
             <div className="input-group">
-              <label className="step-description mb-4">The most important step is always the next one. Choose yours.</label>
+              <label className="step-description mb-4">Select the actions you're confident in then click Submit.</label>
               <div className="items-container">
                 {Object.entries(solutions).flatMap(([id, actions]) =>
                   actions.map((action, index) => ({ id: `${id}-${index}`, action }))
