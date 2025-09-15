@@ -159,6 +159,8 @@ class ActionPlanRequest(BaseModel):
     frontend_session_context: Optional[Dict[str, Any]] = None
     generation_count: int = 0
     existing_plans: Optional[List[str]] = None
+    pain_point: Optional[str] = None
+    cause_analysis_history: Optional[List[Dict[str, str]]] = None
 
 class ActionPlanResponse(BaseModel):
     success: bool
@@ -618,7 +620,9 @@ async def plan_action(session_id: str, request: ActionPlanRequest, current_reque
             regenerate=request.regenerate,
             session_context=session_context,
             generation_count=request.generation_count,
-            existing_plans=request.existing_plans
+            existing_plans=request.existing_plans,
+            pain_point=request.pain_point,
+            cause_analysis_history=request.cause_analysis_history
         )
 
         return ActionPlanResponse(

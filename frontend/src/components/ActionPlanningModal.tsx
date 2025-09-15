@@ -12,6 +12,7 @@ interface ActionPlanningModalProps {
   isContribution?: boolean;
   history: any[];
   sessionContext?: any;
+  causeAnalysisHistory?: any[];
   onClose: (finalActions?: string[]) => void;
 }
 
@@ -21,6 +22,7 @@ export function ActionPlanningModal({
   isContribution = false,
   history,
   sessionContext,
+  causeAnalysisHistory,
   onClose
 }: ActionPlanningModalProps) {
   const ai = useAIAssistant();
@@ -42,7 +44,7 @@ export function ActionPlanningModal({
   };
 
   useEffect(() => {
-    ai.requestActionPlanning(causeText, history, isContribution, false, sessionContext, 0, []);
+    ai.requestActionPlanning(causeText, history, isContribution, false, sessionContext, 0, [], causeAnalysisHistory);
     return () => ai.clearActionPlanning();
   }, [causeId]);
 
@@ -107,7 +109,7 @@ export function ActionPlanningModal({
 
     const newHistory = [...currentHistory, { sender: 'user' as const, text: currentAnswer }];
 
-    ai.requestActionPlanning(causeText, newHistory, isContribution, false, sessionContext);
+    ai.requestActionPlanning(causeText, newHistory, isContribution, false, sessionContext, 0, [], causeAnalysisHistory);
     setCurrentAnswer('');
   };
 
@@ -276,7 +278,7 @@ export function ActionPlanningModal({
                     const newGenerationCount = generationCount + 1;
                     setGenerationCount(newGenerationCount);
                     const existingPlans = ai.actionPlanning?.actionPlanOptions || [];
-                    ai.requestActionPlanning(causeText, ai.actionPlanning?.history || [], isContribution, true, sessionContext, newGenerationCount, existingPlans);
+                    ai.requestActionPlanning(causeText, ai.actionPlanning?.history || [], isContribution, true, sessionContext, newGenerationCount, existingPlans, causeAnalysisHistory);
                   }
                 }}
               />

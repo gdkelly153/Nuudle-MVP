@@ -65,7 +65,7 @@ interface AIAssistantContextType {
   fearAnalysis: FearAnalysisState | null;
   requestAssistance: (stage: string, userInput: string, context: any, forceGuidance?: boolean) => Promise<void>;
   requestCauseAnalysis: (cause: string, history: ChatMessage[], regenerate?: boolean, painPoint?: string) => Promise<void>;
-  requestActionPlanning: (cause: string, history: ChatMessage[], isContribution?: boolean, regenerate?: boolean, sessionContext?: any, generationCount?: number, existingPlans?: string[]) => Promise<void>;
+  requestActionPlanning: (cause: string, history: ChatMessage[], isContribution?: boolean, regenerate?: boolean, sessionContext?: any, generationCount?: number, existingPlans?: string[], causeAnalysisHistory?: ChatMessage[]) => Promise<void>;
   requestFearAnalysis: (mitigationPlan: string, fearContext?: any) => Promise<void>;
   setCauseAnalysisState: (state: CauseAnalysisState) => void;
   setActionPlanningState: (state: ActionPlanningState) => void;
@@ -340,7 +340,7 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
     setCauseAnalysis(null);
   };
 
-  const requestActionPlanning = async (cause: string, history: ChatMessage[], isContribution: boolean = false, regenerate: boolean = false, sessionContext?: any, generationCount?: number, existingPlans?: string[]) => {
+  const requestActionPlanning = async (cause: string, history: ChatMessage[], isContribution: boolean = false, regenerate: boolean = false, sessionContext?: any, generationCount?: number, existingPlans?: string[], causeAnalysisHistory?: ChatMessage[]) => {
     if (!sessionId) return;
 
     setLoadingStage('action_planning');
@@ -353,21 +353,36 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
     }));
 
     try {
+      const requestBody: any = {
+        session_id: sessionId,
+        cause,
+        isContribution,
+        history: history.map(m => m.text),
+        regenerate,
+        include_session_context: true,
+        frontend_session_context: sessionContext,
+        generation_count: generationCount,
+        existing_plans: existingPlans
+      };
+
+      // Add pain_point if available in sessionContext
+      if (sessionContext?.pain_point) {
+        requestBody.pain_point = sessionContext.pain_point;
+      }
+
+      // Add cause_analysis_history if available
+      if (causeAnalysisHistory && causeAnalysisHistory.length > 0) {
+        requestBody.cause_analysis_history = causeAnalysisHistory.map(m => ({
+          sender: m.sender,
+          text: m.text
+        }));
+      }
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/sessions/${sessionId}/actions/plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          session_id: sessionId,
-          cause,
-          isContribution,
-          history: history.map(m => m.text),
-          regenerate,
-          include_session_context: true,
-          frontend_session_context: sessionContext,
-          generation_count: generationCount,
-          existing_plans: existingPlans
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {

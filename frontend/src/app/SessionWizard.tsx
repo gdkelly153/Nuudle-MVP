@@ -1069,6 +1069,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
             solutions: Object.values(solutions).flat().filter(s => s.trim() !== ''),
             fears: Object.values(fears).filter(f => f.risk.trim() !== '' || f.mitigation.trim() !== '' || f.contingency.trim() !== '')
           }}
+          causeAnalysisHistory={causeAnalysisHistories[planningActionId] || undefined}
           onClose={(finalActions) => handleActionPlanning(planningActionId, finalActions)}
         />
       )}

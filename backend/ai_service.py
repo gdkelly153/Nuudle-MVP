@@ -1083,7 +1083,9 @@ async def get_next_action_planning_question(
     regenerate: bool = False,
     session_context: Dict[str, Any] = None,
     generation_count: int = 0,
-    existing_plans: List[str] = None
+    existing_plans: List[str] = None,
+    pain_point: str = None,
+    cause_analysis_history: List[Dict[str, str]] = None
 ) -> Dict[str, Any]:
     """
     Determines the next question in the conversational action planning process.
@@ -1117,17 +1119,43 @@ async def get_next_action_planning_question(
         print(f"Action planning - Formatted history: {history_text}")
         print(f"Action planning - Session context available: {session_context is not None}")
         
-        # Build context section for the prompt
+        # Build enhanced context section for the prompt with new parameters
         context_section = ""
-        if session_context:
-            context_section = f"""
-**FULL SESSION CONTEXT (for better personalization):**
-- Original Problem: "{session_context.get('pain_point', '')}"
-- Contributing Causes: "{session_context.get('causes', '')}"
-- Identified Assumptions: {session_context.get('assumptions', [])}
-- Perpetuating Behaviors: {session_context.get('perpetuations', [])}
+        pain_point_context = pain_point or session_context.get('pain_point', '') if session_context else ""
+        
+        if pain_point_context or session_context or cause_analysis_history:
+            context_parts = []
+            
+            if pain_point_context:
+                context_parts.append(f'- **Original Problem:** "{pain_point_context}"')
+            
+            if session_context:
+                if session_context.get('causes'):
+                    context_parts.append(f'- **Contributing Causes:** "{session_context.get("causes", "")}"')
+                if session_context.get('assumptions'):
+                    context_parts.append(f'- **Identified Assumptions:** {session_context.get("assumptions", [])}')
+                if session_context.get('perpetuations'):
+                    context_parts.append(f'- **Perpetuating Behaviors:** {session_context.get("perpetuations", [])}')
+            
+            if cause_analysis_history and len(cause_analysis_history) > 0:
+                # Format the cause analysis Q&A history
+                qa_pairs = []
+                for i in range(0, len(cause_analysis_history), 2):
+                    if i + 1 < len(cause_analysis_history):
+                        question = cause_analysis_history[i].get('text', '')
+                        answer = cause_analysis_history[i + 1].get('text', '')
+                        if question and answer:
+                            qa_pairs.append(f"  Q: {question}\n  A: {answer}")
+                
+                if qa_pairs:
+                    context_parts.append(f'- **Root Cause Analysis Q&A:**\n' + '\n'.join(qa_pairs))
+            
+            if context_parts:
+                context_section = f"""
+**COMPREHENSIVE CONTEXT (for highly personalized coaching):**
+{chr(10).join(context_parts)}
 
-This context should inform your suggestions to make them highly relevant to their specific situation.
+Use this context to provide Socratic coaching that builds on their specific insights and situation.
 """
 
         # Determine temperature based on generation count
@@ -1279,52 +1307,46 @@ Return ONLY valid JSON:
             "action_plan_options": action_plan_options
         }
 
-    # Generate dynamic questions based on conversation history
-    question_count = len(history) // 2  # Number of completed exchanges
+    # New Socratic coaching model for dynamic question generation
+    question_count = len(history) // 2
+    history_text = "\n".join([f"{'AI' if i % 2 == 0 else 'User'}: {msg}" for i, msg in enumerate(history)])
     
-    if question_count == 0:
-        # First question - open-ended about initial action
-        next_question = f"What comes to mind as a first step you could take to address this {'contribution' if is_contribution else 'cause'}?"
-    elif question_count == 1:
-        # Second question - build on their first response
-        user_first_response = history[1] if len(history) > 1 else ""
-        question_prompt = f"""The user mentioned this {'contribution' if is_contribution else 'cause'}: "{cause}"
-        
-Their first action idea was: "{user_first_response}"
+    socratic_prompt = f"""You are an expert action planning coach named Nuudle. Your goal is to help the user brainstorm and commit to a concrete, actionable plan to address their stated cause.
 
-Generate a follow-up question that helps them think more deeply about implementation, resources needed, or potential obstacles. Make it specific to their response and conversational.
+**Your Coaching Persona:**
+- **Forward-Looking and Practical:** Your focus is on solutions and next steps, not on further analysis of the past.
+- **Encouraging and Collaborative:** You are a partner in brainstorming, helping the user build on their own ideas.
+- **Focused on Specificity:** You guide the user from vague intentions to specific, measurable actions.
 
-Return only the question text, no other formatting."""
-        
-        try:
-            ai_result = await get_claude_response(question_prompt)
-            next_question = ai_result['responseText'].strip()
-        except:
-            next_question = "What resources, time, or support would you need to actually make this happen?"
-    
-    elif question_count == 2:
-        # Third question - focus on success measurement or refinement
-        user_first_response = history[1] if len(history) > 1 else ""
-        user_second_response = history[3] if len(history) > 3 else ""
-        
-        question_prompt = f"""The user mentioned this {'contribution' if is_contribution else 'cause'}: "{cause}"
+**Comprehensive Context:**
+- **Original Problem:** "{pain_point}"
+- **Cause to Address:** "{cause}"
+- **Root Cause Analysis Q&A (if available):**
+{cause_analysis_history or "No root cause analysis was performed for this cause."}
+- **Action Planning Conversation So Far:**
+{history_text or "This is the first question of the conversation."}
 
-Their action idea: "{user_first_response}"
-Their implementation thoughts: "{user_second_response}"
+**Your Task:**
+Based on all the context, generate a single, insightful follow-up question that moves the user toward a concrete action plan.
 
-Generate a final question that helps them think about how they'll know if their action is working, or helps them refine their approach. Make it specific and conversational.
+**Chain of Thought for Question Generation:**
+1.  **Analyze the User's Last Response:** What is the core action they are proposing?
+2.  **Assess its "Actionability":** Is the proposed action specific? Is it a concrete step or a vague goal?
+3.  **Identify the Most Helpful Next Question:**
+    - If the user's idea is vague (e.g., "I'll be more patient"), ask a question to make it concrete (e.g., "That's a great goal. What would being 'more patient' look like in practice in that specific situation?").
+    - If the user's idea is a good first step, ask a question to build on it or consider obstacles (e.g., "That's a solid first step. What's one thing that might get in the way of you doing that consistently?").
+    - If the user is stuck, offer a prompt to get them started (e.g., "It can be tough to know where to start. What's the absolute smallest, easiest first step you could take to address this?").
 
-Return only the question text, no other formatting."""
-        
-        try:
-            ai_result = await get_claude_response(question_prompt)
-            next_question = ai_result['responseText'].strip()
-        except:
-            next_question = "How would you know if this action is working? What would tell you it's making a difference?"
-    
-    else:
-        # Fallback - shouldn't happen
-        next_question = "Is there anything else you'd like to consider about this action plan?"
+**CRITICAL:** Your questions must be about **actions and solutions**, not about further diagnosing the cause. Return only the single question you've generated. No extra text, formatting, or explanation.
+"""
+
+    try:
+        ai_result = await get_claude_response(socratic_prompt)
+        next_question = ai_result['responseText'].strip()
+    except Exception as e:
+        print(f"Socratic coaching model error: {e}")
+        # Fallback to a safe, open-ended question
+        next_question = "That's a helpful start. What would be the next logical step to take?"
 
     return {
         "success": True,
