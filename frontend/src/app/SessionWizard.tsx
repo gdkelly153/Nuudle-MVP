@@ -1269,7 +1269,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
               buttonStep={0}
               isHighlighted={showGuidanceHint}
             />
-            <Tooltip text="Enter a problem statement to proceed." isDisabled={step === 0 && (!painPoint.trim() || isValidatingProblem)}>
+            <Tooltip text="Enter a problem statement to proceed." isEnabled={step === 0 && (!painPoint.trim() || isValidatingProblem)}>
               <button
                 type="button"
                 onClick={startSession}
@@ -1392,7 +1392,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
             )}
             <Tooltip
               text={causesSubmitted ? "Proceed to the next step" : "Submit your causes to enable AI analysis"}
-              isDisabled={step === 1 && !(causes.length > 0 && causes[0].cause.trim() !== "")}
+              isEnabled={step === 1 && !(causes.length > 0 && causes[0].cause.trim() !== "")}
             >
               <button
                 type="button"
@@ -1833,7 +1833,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
             <button type="button" onClick={prevStep} disabled={step !== 3}>
               Back
             </button>
-            <Tooltip text="Use AI guidance to plan at least one action to proceed." isDisabled={step === 3 && Object.values(solutions).some((actions) => actions.some(action => action.trim() !== ""))}>
+            <Tooltip text="Use AI guidance to plan at least one action to proceed." isEnabled={step === 3 && !Object.values(solutions).some((actions) => actions.some(action => action.trim() !== ""))}>
               <button type="button" onClick={() => {
                 // Filter out empty solutions before proceeding
                 const filteredSolutions = Object.fromEntries(
@@ -2045,7 +2045,7 @@ const syncTextareaHeights = (e: React.FormEvent<HTMLTextAreaElement>) => {
             <button type="button" onClick={prevStep} disabled={step !== 4}>
               Back
             </button>
-            <Tooltip text="Process your concerns or check the 'not worried' option to proceed." isDisabled={step === 4 && (!notWorried && !Object.values(fears).some((fear) => fear.risk.trim() !== "" && fear.mitigation.trim() !== "" && fear.contingency.trim() !== ""))}>
+            <Tooltip text="Process your concerns or check the 'not worried' option to proceed." isEnabled={step === 4 && (!notWorried && !Object.values(fears).some((fear) => fear.risk.trim() !== "" && fear.mitigation.trim() !== "" && fear.contingency.trim() !== ""))}>
               <button
                 type="button"
                 onClick={nextStep}

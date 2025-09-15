@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { createRoot } from 'react-dom/client';
+import React, { useState } from 'react';
+import { createRoot, Root } from 'react-dom/client';
 import SummaryRenderer from '@/components/SummaryRenderer';
 
 export interface SummaryData {
@@ -28,6 +28,16 @@ export interface SessionData {
   fears: { name: string; mitigation: string; contingency: string }[];
   action_plan: string;
 }
+
+// Utility function to ensure fonts and rendering are complete
+const waitForRender = async (): Promise<void> => {
+  // Wait for fonts to be ready
+  await document.fonts.ready;
+  
+  // Wait for two animation frames to ensure layout and paint are complete
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  await new Promise(resolve => requestAnimationFrame(resolve));
+};
 
 export const useSummaryDownloader = () => {
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
@@ -78,103 +88,122 @@ export const useSummaryDownloader = () => {
     }
   };
 
-  const createTemporarySummaryElement = (summaryData: SummaryData, elementId: string): HTMLElement => {
-    // Create a temporary container
+  const createTemporarySummaryElement = async (summaryData: SummaryData, elementId: string): Promise<{ element: HTMLElement; cleanup: () => void }> => {
+    // Create a temporary container - make it visible but positioned off-screen
     const tempContainer = document.createElement('div');
-    tempContainer.style.position = 'absolute';
-    tempContainer.style.top = '-9999px';
+    tempContainer.style.position = 'fixed';
+    tempContainer.style.top = '0px';
     tempContainer.style.left = '-9999px';
-    tempContainer.style.zIndex = '-1';
     tempContainer.style.width = '800px'; // Fixed width for consistent rendering
-    tempContainer.style.backgroundColor = 'white';
+    tempContainer.style.height = 'auto';
+    tempContainer.style.overflow = 'visible';
+    tempContainer.style.zIndex = '9999';
+    tempContainer.style.visibility = 'visible'; // Make visible for html2canvas
+    tempContainer.style.opacity = '1';
+    tempContainer.style.pointerEvents = 'none';
     tempContainer.style.padding = '20px';
-    tempContainer.style.fontFamily = 'Arial, sans-serif';
-    tempContainer.style.fontSize = '14px';
-    tempContainer.style.lineHeight = '1.6';
-    tempContainer.style.color = '#333';
+    tempContainer.style.boxSizing = 'border-box';
     
-    // Create the summary content element
-    const summaryElement = document.createElement('div');
-    summaryElement.id = elementId;
-    summaryElement.className = 'summary-content';
+    // Get the current theme and computed styles from the document
+    const htmlElement = document.documentElement;
+    const bodyElement = document.body;
+    const currentTheme = htmlElement.getAttribute('data-theme');
     
-    // Build the HTML content
-    summaryElement.innerHTML = `
-      <div class="summary-header" style="margin-bottom: 20px; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
-        <h2 style="margin: 0; color: #007bff; font-size: 24px;">${summaryData.title}</h2>
-      </div>
-      
-      <div class="summary-section" style="margin-bottom: 20px;">
-        <h3 style="color: #007bff; font-size: 18px; margin-bottom: 10px;">Problem Overview</h3>
-        <p style="margin: 0; text-align: justify;">${summaryData.problem_overview}</p>
-      </div>
-      
-      <div class="summary-section" style="margin-bottom: 20px;">
-        <h3 style="color: #007bff; font-size: 18px; margin-bottom: 10px;">Key Insights</h3>
-        <ul style="margin: 0; padding-left: 20px;">
-          ${summaryData.key_insights.map(insight => `<li style="margin-bottom: 5px;">${insight}</li>`).join('')}
-        </ul>
-      </div>
-      
-      <div class="summary-section" style="margin-bottom: 20px;">
-        <h3 style="color: #007bff; font-size: 18px; margin-bottom: 10px;">Action Plan</h3>
-        <div class="action-plan">
-          <div class="primary-action" style="margin-bottom: 15px;">
-            <h4 style="color: #333; font-size: 16px; margin-bottom: 5px;">Primary Action</h4>
-            <p style="margin: 0; text-align: justify;">${summaryData.action_plan.primary_action}</p>
-          </div>
-          
-          <div class="supporting-actions" style="margin-bottom: 15px;">
-            <h4 style="color: #333; font-size: 16px; margin-bottom: 5px;">Supporting Actions</h4>
-            <ul style="margin: 0; padding-left: 20px;">
-              ${summaryData.action_plan.supporting_actions.map(action => `<li style="margin-bottom: 5px;">${action}</li>`).join('')}
-            </ul>
-          </div>
-          
-          <div class="timeline">
-            <h4 style="color: #333; font-size: 16px; margin-bottom: 5px;">Timeline</h4>
-            <p style="margin: 0; text-align: justify;">${summaryData.action_plan.timeline}</p>
-          </div>
-        </div>
-      </div>
-      
-      <div class="summary-section" style="margin-bottom: 20px;">
-        <h3 style="color: #007bff; font-size: 18px; margin-bottom: 10px;">Feedback</h3>
-        <div class="feedback">
-          <div class="strengths" style="margin-bottom: 10px;">
-            <h4 style="color: #333; font-size: 16px; margin-bottom: 5px;">Strengths</h4>
-            <p style="margin: 0; text-align: justify;">${summaryData.feedback.strengths}</p>
-          </div>
-          
-          <div class="areas-for-growth" style="margin-bottom: 10px;">
-            <h4 style="color: #333; font-size: 16px; margin-bottom: 5px;">Areas for Growth</h4>
-            <p style="margin: 0; text-align: justify;">${summaryData.feedback.areas_for_growth}</p>
-          </div>
-          
-          <div class="validation">
-            <h4 style="color: #333; font-size: 16px; margin-bottom: 5px;">Validation</h4>
-            <p style="margin: 0; text-align: justify;">${summaryData.feedback.validation}</p>
-          </div>
-        </div>
-      </div>
-      
-      <div class="summary-section">
-        <h3 style="color: #007bff; font-size: 18px; margin-bottom: 10px;">Conclusion</h3>
-        <p style="margin: 0; text-align: justify;">${summaryData.conclusion}</p>
-      </div>
-    `;
+    // Copy theme attributes
+    if (currentTheme) {
+      tempContainer.setAttribute('data-theme', currentTheme);
+    }
     
-    tempContainer.appendChild(summaryElement);
+    // Copy all CSS custom properties (variables) from the root element
+    const rootStyles = window.getComputedStyle(htmlElement);
+    const bodyStyles = window.getComputedStyle(bodyElement);
+    
+    // Apply theme-aware background and text colors
+    const backgroundColor = bodyStyles.backgroundColor ||
+                           rootStyles.getPropertyValue('--background-color') ||
+                           (currentTheme === 'dark' ? '#1a1a1a' : '#ffffff');
+    const textColor = bodyStyles.color ||
+                     rootStyles.getPropertyValue('--text-color') ||
+                     (currentTheme === 'dark' ? '#ffffff' : '#333333');
+    
+    tempContainer.style.backgroundColor = backgroundColor;
+    tempContainer.style.color = textColor;
+    
+    // Copy essential font properties
+    tempContainer.style.fontFamily = bodyStyles.fontFamily || 'Arial, sans-serif';
+    tempContainer.style.fontSize = bodyStyles.fontSize || '16px';
+    tempContainer.style.lineHeight = bodyStyles.lineHeight || '1.6';
+    
+    // Copy all CSS custom properties from root to the temporary container
+    for (let i = 0; i < rootStyles.length; i++) {
+      const property = rootStyles[i];
+      if (property.startsWith('--')) {
+        const value = rootStyles.getPropertyValue(property);
+        tempContainer.style.setProperty(property, value);
+      }
+    }
+    
+    // Create a wrapper div that will contain the React component
+    const reactWrapper = document.createElement('div');
+    reactWrapper.style.width = '100%';
+    reactWrapper.style.height = 'auto';
+    reactWrapper.style.overflow = 'visible';
+    // Add padding to the wrapper that will be captured by html2canvas
+    reactWrapper.style.padding = '20px';
+    reactWrapper.style.boxSizing = 'border-box';
+    tempContainer.appendChild(reactWrapper);
     document.body.appendChild(tempContainer);
     
-    return summaryElement;
+    // Create React root and render the SummaryRenderer component
+    const root = createRoot(reactWrapper);
+    
+    return new Promise(async (resolve) => {
+      root.render(React.createElement(SummaryRenderer, { summary: summaryData, id: elementId }));
+      
+      // Wait for rendering to complete using the robust waitForRender utility
+      await waitForRender();
+      
+      const summaryElement = reactWrapper.querySelector(`#${elementId}`) as HTMLElement;
+      if (summaryElement) {
+        // Apply theme-aware styling to the summary element
+        summaryElement.style.width = '100%';
+        summaryElement.style.height = 'auto';
+        summaryElement.style.overflow = 'visible';
+        summaryElement.style.backgroundColor = backgroundColor;
+        summaryElement.style.color = textColor;
+        summaryElement.style.padding = '20px';
+        summaryElement.style.margin = '0';
+        summaryElement.style.boxSizing = 'border-box';
+        
+        // Force a layout calculation to ensure dimensions are calculated
+        tempContainer.offsetHeight;
+        summaryElement.offsetHeight;
+        
+        resolve({
+          element: summaryElement,
+          cleanup: () => {
+            root.unmount();
+            if (tempContainer.parentNode) {
+              tempContainer.parentNode.removeChild(tempContainer);
+            }
+          }
+        });
+      } else {
+        // Fallback cleanup if something goes wrong
+        root.unmount();
+        if (tempContainer.parentNode) {
+          tempContainer.parentNode.removeChild(tempContainer);
+        }
+        throw new Error('Failed to render summary component');
+      }
+    });
   };
 
   const downloadAsPDF = async (sessionId: string, elementId: string = 'summary-content') => {
     if (!summaryData) return;
     
-    let tempElement: HTMLElement | null = null;
-    let tempContainer: HTMLElement | null = null;
+    let tempCleanup: (() => void) | null = null;
+    let paddingElement: HTMLElement | null = null;
     
     try {
       // Dynamic import to reduce bundle size
@@ -186,22 +215,102 @@ export const useSummaryDownloader = () => {
       
       if (!targetElement) {
         // Create temporary element if not found (for SessionCard usage)
-        tempElement = createTemporarySummaryElement(summaryData, elementId);
-        tempContainer = tempElement.parentElement;
-        targetElement = tempElement;
+        const tempResult = await createTemporarySummaryElement(summaryData, elementId);
+        targetElement = tempResult.element;
+        tempCleanup = tempResult.cleanup;
       }
       
       if (!targetElement) return;
       
-      // Give the browser a moment to render
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Find the timeline element that was causing page break issues
+      const timelineElement = targetElement.querySelector('.timeline');
       
+      if (timelineElement) {
+        // Calculate precise padding needed for clean page break
+        const timelineRect = timelineElement.getBoundingClientRect();
+        const containerRect = targetElement.getBoundingClientRect();
+        
+        // Calculate the relative position of timeline within the content
+        const timelineOffsetFromTop = timelineRect.top - containerRect.top;
+        
+        // A4 page height in pixels (approximately 1123px at 96 DPI)
+        const pageHeightPx = 1123;
+        
+        // Calculate which page the timeline currently falls on
+        const currentPagePosition = timelineOffsetFromTop % pageHeightPx;
+        
+        // If timeline is in the lower portion of a page, push it to next page
+        if (currentPagePosition > pageHeightPx * 0.6) { // If it's more than 60% down a page
+          const paddingNeeded = pageHeightPx - currentPagePosition + 10; // Small buffer
+          
+          // Create minimal padding element
+          paddingElement = document.createElement('div');
+          paddingElement.style.height = `${paddingNeeded}px`;
+          paddingElement.style.width = '100%';
+          paddingElement.style.visibility = 'hidden';
+          paddingElement.style.pointerEvents = 'none';
+          paddingElement.setAttribute('data-pdf-padding', 'true');
+          
+          // Insert before timeline element
+          timelineElement.parentNode?.insertBefore(paddingElement, timelineElement);
+          
+          // Wait for layout to stabilize after padding insertion
+          await waitForRender();
+        }
+      }
+      
+      // Wait for rendering to complete before dynamic padding and measurement
+      await waitForRender();
+
+      // DIAGNOSTIC LOGGING - After waitForRender (before padding)
+      console.log('🔍 PDF DEBUG - After waitForRender (before padding):', {
+        scrollHeight: targetElement.scrollHeight,
+        offsetHeight: targetElement.offsetHeight,
+        clientHeight: targetElement.clientHeight,
+        scrollWidth: targetElement.scrollWidth,
+        offsetWidth: targetElement.offsetWidth,
+        clientWidth: targetElement.clientWidth
+      });
+      
+      // Detect current theme for background color
+      const htmlElement = document.documentElement;
+      const bodyElement = document.body;
+      const currentTheme = htmlElement.getAttribute('data-theme');
+      const bodyStyles = window.getComputedStyle(bodyElement);
+      const rootStyles = window.getComputedStyle(htmlElement);
+      
+      const backgroundColor = bodyStyles.backgroundColor ||
+                             rootStyles.getPropertyValue('--background-color') ||
+                             (currentTheme === 'dark' ? '#1a1a1a' : '#ffffff');
+      
+      // Calculate the actual content dimensions
+      const fullHeight = Math.max(
+        targetElement.scrollHeight,
+        targetElement.offsetHeight,
+        targetElement.clientHeight
+      );
+      const fullWidth = Math.max(
+        targetElement.scrollWidth,
+        targetElement.offsetWidth,
+        targetElement.clientWidth
+      );
+
       const canvas = await html2canvas(targetElement, {
         scale: 2,
         useCORS: true,
         allowTaint: true,
-        height: targetElement.scrollHeight,
-        width: targetElement.scrollWidth,
+        height: fullHeight, // Force canvas to be full content height
+        width: fullWidth,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: fullWidth,
+        backgroundColor: backgroundColor,
+        ignoreElements: (element) => {
+          // Ignore any elements that might interfere with capture
+          return element.classList?.contains('modal-close-button') ||
+                 element.classList?.contains('modal-overlay') ||
+                 element.getAttribute('aria-hidden') === 'true';
+        },
       });
       
       const imgData = canvas.toDataURL('image/png');
@@ -215,7 +324,7 @@ export const useSummaryDownloader = () => {
       pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
       heightLeft -= pageHeight;
       
-      while (heightLeft >= 0) {
+      while (heightLeft > 1) {
         position = heightLeft - imgHeight;
         pdf.addPage();
         pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
@@ -227,9 +336,14 @@ export const useSummaryDownloader = () => {
       console.error('Error generating PDF:', error);
       alert('Failed to generate PDF. Please try again.');
     } finally {
+      // Clean up padding element
+      if (paddingElement && paddingElement.parentNode) {
+        paddingElement.parentNode.removeChild(paddingElement);
+      }
+      
       // Clean up temporary elements
-      if (tempContainer && tempContainer.parentNode) {
-        tempContainer.parentNode.removeChild(tempContainer);
+      if (tempCleanup) {
+        tempCleanup();
       }
     }
   };
@@ -237,8 +351,7 @@ export const useSummaryDownloader = () => {
   const saveAsImage = async (sessionId: string, elementId: string = 'summary-content') => {
     if (!summaryData) return;
     
-    let tempElement: HTMLElement | null = null;
-    let tempContainer: HTMLElement | null = null;
+    let tempCleanup: (() => void) | null = null;
     
     try {
       const html2canvas = (await import('html2canvas')).default;
@@ -248,22 +361,56 @@ export const useSummaryDownloader = () => {
       
       if (!targetElement) {
         // Create temporary element if not found (for SessionCard usage)
-        tempElement = createTemporarySummaryElement(summaryData, elementId);
-        tempContainer = tempElement.parentElement;
-        targetElement = tempElement;
+        const tempResult = await createTemporarySummaryElement(summaryData, elementId);
+        targetElement = tempResult.element;
+        tempCleanup = tempResult.cleanup;
       }
       
       if (!targetElement) return;
       
-      // Give the browser a moment to render
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Give the browser more time to render and apply styles
+      await new Promise(resolve => setTimeout(resolve, 300));
       
+      // Detect current theme for background color
+      const htmlElement = document.documentElement;
+      const bodyElement = document.body;
+      const currentTheme = htmlElement.getAttribute('data-theme');
+      const bodyStyles = window.getComputedStyle(bodyElement);
+      const rootStyles = window.getComputedStyle(htmlElement);
+      
+      const backgroundColor = bodyStyles.backgroundColor ||
+                             rootStyles.getPropertyValue('--background-color') ||
+                             (currentTheme === 'dark' ? '#1a1a1a' : '#ffffff');
+      
+      // Ensure we capture the full content including any overflow
+      const fullHeight = Math.max(
+        targetElement.scrollHeight,
+        targetElement.offsetHeight,
+        targetElement.clientHeight
+      );
+      const fullWidth = Math.max(
+        targetElement.scrollWidth,
+        targetElement.offsetWidth,
+        targetElement.clientWidth
+      );
+
       const canvas = await html2canvas(targetElement, {
         scale: 2,
         useCORS: true,
         allowTaint: true,
-        height: targetElement.scrollHeight,
-        width: targetElement.scrollWidth,
+        height: fullHeight,
+        width: fullWidth,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: fullWidth,
+        windowHeight: fullHeight,
+        backgroundColor: backgroundColor,
+        ignoreElements: (element) => {
+          // Ignore any elements that might interfere with capture
+          return element.classList?.contains('modal-close-button') ||
+                 element.classList?.contains('modal-overlay') ||
+                 element.getAttribute('aria-hidden') === 'true';
+        },
       });
       
       canvas.toBlob((blob: Blob | null) => {
@@ -281,8 +428,8 @@ export const useSummaryDownloader = () => {
       alert('Failed to generate image. Please try again.');
     } finally {
       // Clean up temporary elements
-      if (tempContainer && tempContainer.parentNode) {
-        tempContainer.parentNode.removeChild(tempContainer);
+      if (tempCleanup) {
+        tempCleanup();
       }
     }
   };

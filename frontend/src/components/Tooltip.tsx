@@ -4,16 +4,16 @@ import { createPortal } from 'react-dom';
 interface TooltipProps {
   children: React.ReactNode;
   text: string;
-  isDisabled: boolean;
+  isEnabled: boolean;
 }
 
-const Tooltip: React.FC<TooltipProps> = ({ children, text, isDisabled }) => {
+const Tooltip: React.FC<TooltipProps> = ({ children, text, isEnabled }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const handleMouseEnter = () => {
-    if (isDisabled) {
+    if (isEnabled) {
       setIsVisible(true);
     }
   };
@@ -68,7 +68,7 @@ const Tooltip: React.FC<TooltipProps> = ({ children, text, isDisabled }) => {
     }
   }, [isVisible, text]);
 
-  if (!isDisabled) {
+  if (!isEnabled) {
     return <div style={{ display: 'inline-block' }}>{children}</div>;
   }
 

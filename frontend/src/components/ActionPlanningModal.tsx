@@ -287,7 +287,7 @@ export function ActionPlanningModal({
                 </button>
                 <Tooltip
                   text="Select one or more action plans, then confirm your selections to move forward."
-                  isDisabled={!selectedOptions.length && !customOption.trim()}
+                  isEnabled={!selectedOptions.length && !customOption.trim()}
                 >
                   <button
                     onClick={() => {

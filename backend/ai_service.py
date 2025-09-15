@@ -763,54 +763,6 @@ async def log_ai_interaction(interaction_data: Dict[str, Any]) -> str:
     
     return str(result.inserted_id)
 
-def classify_cause(cause_text: str) -> str:
-    """
-    Classifies a cause into 'behavior', 'belief', or 'external'.
-    """
-    lower_text = cause_text.lower()
-    
-    # Behavior patterns - actions the user takes
-    behavior_patterns = [
-        'i ', 'when i', 'after i', 'before i', 'while i', 'as i',
-        'i tend to', 'i always', 'i usually', 'i often', 'i sometimes',
-        'i do', 'i go', 'i say', 'i choose', 'i decide', 'i react',
-        'i scroll', 'i snack', 'i drink', 'i smoke', 'i eat', 'i watch',
-        'i work', 'i procrastinate', 'i avoid', 'i delay', 'i rush'
-    ]
-    
-    # Belief/thought patterns
-    belief_patterns = [
-        'i think', 'i believe', 'i feel like', 'i assume',
-        'i\'m not good', 'i\'m bad at', 'i can\'t', 'i\'m unable',
-        'people think', 'others believe', 'everyone expects',
-        'it\'s impossible', 'it\'s too hard', 'it\'s not worth'
-    ]
-    
-    # External/situational factors
-    external_patterns = [
-        'my boss', 'my manager', 'my coworker', 'my partner', 'my family',
-        'the weather', 'the economy', 'the system', 'the environment',
-        'there isn\'t time', 'there\'s no', 'the schedule', 'work demands'
-    ]
-
-    # Check for behavior patterns first (most specific)
-    if any(pattern in lower_text for pattern in behavior_patterns):
-        return 'behavior'
-        
-    # Check for belief patterns
-    if any(pattern in lower_text for pattern in belief_patterns):
-        return 'belief'
-        
-    # Check for external patterns
-    if any(pattern in lower_text for pattern in external_patterns):
-        return 'external'
-
-    # Default to behavior if it starts with "I" in any form
-    if lower_text.startswith(('i ', 'when i', 'after i', 'before i')):
-        return 'behavior'
-    
-    # Final fallback
-    return 'belief'
 
 def detect_loop_and_summarize(history: List[str]) -> Optional[str]:
     """
@@ -1008,24 +960,21 @@ Generate 4 diverse root cause statements that dig deeper than the surface-level 
 
     # Generate the next question based on evaluation or question count
     if question_count == 0:
-        # First question - use dynamic AI generation based on cause classification
-        cause_type = classify_cause(cause)
-        
-        # Create dynamic prompt for first question
+        # First question - use dynamic AI generation with intelligent context analysis
         first_question_prompt = f"""You are an AI assistant helping a user start a root cause analysis conversation. Your goal is to generate a single, personalized opening question based on their stated cause.
 
 **User's Stated Cause:** "{cause}"
-**Focus Area for Your Question:** "{cause_type}"
+
+**Instructions:**
+1. Analyze the user's statement to identify the most significant factor they've mentioned. This could be an external event, a personal behavior, an expressed belief, or a feeling.
+2. Formulate a single, open-ended question that directly addresses this key factor.
+3. Your question should encourage the user to provide more detail about that specific factor to understand the "why" behind it.
+4. Do not make assumptions or introduce new concepts. Base your question solely on the information the user has provided.
 
 **Tone and Style Guide:**
 - **Be Direct and Clear:** The question should be straightforward and easy to understand. Get straight to the point without unnecessary introductory phrases.
 - **Use Natural Language:** Frame the question using simple, everyday language. Avoid academic, clinical, or robotic phrasing.
 - **Be Relevant:** The question must be a direct and obvious follow-up to the user's stated cause, showing you have understood their specific situation.
-
-**Focus Area Guidance:**
-- If focus area is "behavior": Ask about what happens in the moment before/during the behavior, what triggers it, or what it feels like
-- If focus area is "belief": Ask about specific experiences that formed this belief or what evidence supports it
-- If focus area is "external": Ask for concrete examples or what specifically makes this external factor problematic
 
 Generate only a single, direct question. Do not include any other text, explanations, or formatting."""
 
@@ -1035,13 +984,8 @@ Generate only a single, direct question. Do not include any other text, explanat
             print(f"DEBUG: Generated dynamic first question: {next_question}")
         except Exception as e:
             print(f"DEBUG: Error generating dynamic first question: {e}")
-            # Fallback to simplified static questions if AI fails
-            fallback_questions = {
-                "behavior": "What's happening in the moment you do this?",
-                "belief": "What experiences led you to this belief?",
-                "external": "Can you give me a specific example of this?"
-            }
-            next_question = fallback_questions.get(cause_type, "Can you tell me more about this?")
+            # Fallback to a simple, open-ended question if AI fails
+            next_question = "What's behind this? Can you tell me more about what's driving this situation?"
             
     else:
         # Subsequent questions - use adaptive questioning based on latest response
