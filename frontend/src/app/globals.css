@@ -64,7 +64,7 @@ body {
 body {
   color: var(--text-primary);
   background: var(--bg-primary);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-dm-sans), sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   display: flex;
@@ -748,7 +748,7 @@ button:disabled {
 
 /* AI responses use softer, more conversational typography */
 .ai-response {
-  font-family: sans-serif;
+  font-family: var(--font-dm-sans), sans-serif;
   font-weight: 400;
   line-height: 1.6;
   font-size: 0.95rem; /* Slightly smaller than main content */
@@ -841,9 +841,11 @@ button:disabled {
 
 @keyframes brain-pulse {
   0%, 100% {
+    -webkit-filter: drop-shadow(0 0 2px rgba(59, 130, 246, 0.4));
     filter: drop-shadow(0 0 2px rgba(59, 130, 246, 0.4));
   }
   50% {
+    -webkit-filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.8));
     filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.8));
   }
 }
@@ -883,6 +885,7 @@ button:disabled {
   width: 20px;
   height: 20px;
   z-index: 5;
+  -webkit-filter: drop-shadow(0 0 3px rgba(74, 144, 226, 0.5));
   filter: drop-shadow(0 0 3px rgba(74, 144, 226, 0.5));
   pointer-events: none;
 }
@@ -2366,6 +2369,7 @@ button:disabled {
   width: 24px;
   height: 24px;
   color: #2c2c2c;
+  -webkit-filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
 }
 
@@ -2398,7 +2402,7 @@ button:disabled {
 }
 
 .ai-response-content {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-dm-sans), sans-serif;
   font-size: 0.95rem;
   line-height: 1.7;
   color: var(--text-primary);

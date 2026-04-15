@@ -1,0 +1,60 @@
+.container {
+  width: 100%;
+  max-width: 600px;
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #E2E8F0;
+  margin: 0;
+}
+
+.progress {
+  font-size: 0.875rem;
+  color: #4FD1C5;
+  font-weight: 500;
+  padding: 0.25rem 0.75rem;
+  background: rgba(79, 209, 197, 0.1);
+  border-radius: 12px;
+}
+
+.cardsGrid {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .container {
+    padding: 1rem;
+    margin: 1.5rem 0;
+  }
+  
+  .header {
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+  
+  .title {
+    font-size: 1.1rem;
+  }
+  
+  .cardsGrid {
+    gap: 0.75rem;
+  }
+}

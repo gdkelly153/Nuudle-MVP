@@ -1,0 +1,119 @@
+.card {
+  width: 45px;
+  height: 56px;
+  perspective: 1000px;
+  cursor: default;
+}
+
+.cardInner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s;
+  transform-style: preserve-3d;
+}
+
+.card.solved .cardInner {
+  transform: rotateY(180deg);
+}
+
+.cardFront,
+.cardBack {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.cardFront {
+  background: rgba(200, 90, 84, 0.1);
+  border: 2px solid rgba(200, 90, 84, 0.3);
+}
+
+.cardNumber {
+  font-size: 16px;
+  font-weight: bold;
+  color: #C85A54;
+  text-shadow: none;
+}
+
+.cardBack {
+  background: rgba(65, 173, 176, 0.15);
+  transform: rotateY(180deg);
+  border: 2px solid var(--refined-balance-teal);
+}
+
+.checkmark {
+  width: 24px;
+  height: 24px;
+  color: var(--refined-balance-teal);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+  animation: checkmarkPop 0.3s ease-out 0.3s both;
+}
+
+.iconKeyword {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--refined-balance-teal);
+  text-align: center;
+  animation: iconPop 0.3s ease-out 0.3s both;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+@keyframes checkmarkPop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes iconPop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Responsive sizing */
+@media (max-width: 768px) {
+  .card {
+    width: 40px;
+    height: 50px;
+  }
+  
+  .cardNumber {
+    font-size: 14px;
+  }
+  
+  .checkmark {
+    width: 20px;
+    height: 20px;
+  }
+  
+  .iconKeyword {
+    font-size: 16px;
+  }
+}

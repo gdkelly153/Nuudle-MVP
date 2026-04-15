@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -9,6 +9,7 @@ import ThemeSwitcher from './ThemeSwitcher';
 const Navigation = () => {
   const { user, isAuthenticated, logout, isLoading } = useAuth();
   const router = useRouter();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleLogout = async () => {
     await logout();
@@ -28,6 +29,18 @@ const Navigation = () => {
         
         {isAuthenticated && (
           <>
+            <div className="menu-container">
+              <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="menu-button">
+                Modules
+              </button>
+              {isMenuOpen && (
+                <div className="dropdown-menu">
+                  <Link href="/problem-solver" className="dropdown-item">Problem Solver</Link>
+                  <Link href="/daily-riddle" className="dropdown-item">Daily Riddle</Link>
+                  <Link href="/daily-scenario" className="dropdown-item">Daily Scenario</Link>
+                </div>
+              )}
+            </div>
             <Link href="/history" className="nav-link nav-bordered-item">
               History
             </Link>
@@ -108,6 +121,56 @@ const Navigation = () => {
         .logout-button:hover {
           background-color: var(--golden-mustard-focus);
           border-color: var(--golden-mustard);
+          color: var(--golden-mustard);
+        }
+
+        .menu-container {
+          position: relative;
+        }
+
+        .menu-button {
+          background: none;
+          border: 1px solid var(--border-medium);
+          color: var(--text-primary);
+          padding: 0.5rem 1rem;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 0.875rem;
+          font-weight: 500;
+          transition: all 0.2s ease;
+        }
+
+        .menu-button:hover {
+          background-color: var(--golden-mustard-focus);
+          border-color: var(--golden-mustard);
+          color: var(--golden-mustard);
+        }
+
+        .dropdown-menu {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-light);
+          border-radius: 8px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          padding: 0.5rem;
+          min-width: 150px;
+        }
+
+        .dropdown-item {
+          color: var(--text-primary);
+          text-decoration: none;
+          padding: 0.5rem 1rem;
+          border-radius: 6px;
+          transition: all 0.2s ease;
+        }
+
+        .dropdown-item:hover {
+          background-color: var(--golden-mustard-focus);
           color: var(--golden-mustard);
         }
 

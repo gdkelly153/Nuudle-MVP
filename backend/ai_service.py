@@ -505,7 +505,7 @@ async def get_claude_response(prompt: str, temperature: float = 0.4, system_prom
     """Get response from Claude API"""
     try:
         message = anthropic.messages.create(
-            model="claude-3-haiku-20240307",
+            model="claude-sonnet-4-5",
             max_tokens=1024,
             system=system_prompt,
             temperature=temperature,
@@ -2328,10 +2328,787 @@ def parse_ai_suggestions(response_text: str) -> list:
     
     return suggestions[:5]  # Limit to 5 suggestions
 
-# Create a simple AIService class for the routes to use
-class AIService:
-    async def generate_action_options(self, cause: str, is_contribution: bool, user_responses: List[str]) -> List[Dict[str, Any]]:
-        return await generate_action_options(cause, is_contribution, user_responses)
+async def get_riddle_question_response(question: str, riddle_solution: str) -> Dict[str, Any]:
+    """
+    Use AI to determine if a yes/no question about a riddle should be answered with "Yes" or "No".
+    Uses a "Chain of Thought" reasoning process to intelligently handle ambiguous questions.
     
-    async def refine_action(self, initial_action: str, cause: str, user_feedback: str) -> str:
-        return await refine_action(initial_action, cause, user_feedback)
+    Args:
+        question: The user's yes/no question about the riddle
+        riddle_solution: The correct answer to the riddle
+    
+    Returns:
+        Dict with 'response' key containing "Yes" or "No"
+    """
+    riddle_prompt = f"""You are an AI assistant for a riddle game. Your task is to intelligently analyze a user's question and provide an accurate "Yes" or "No" response.
+
+**Riddle Solution:** "{riddle_solution}"
+**User's Question:** "{question}"
+
+**Your "Chain of Thought" Analysis Process:**
+
+**Step 1: Identify Potential Meanings**
+Analyze the user's question for any words that could be ambiguous. For example, "state" could mean physical state (solid/liquid/gas) or operational state (on/off).
+
+**Step 2: Analyze Contextual Clues**
+Look for other words in the question that clarify the user's intent. For example, if the user asks, "Is the object's state, a solid?", the word "solid" is a strong clue that they are asking about the physical state.
+
+**Step 3: Make an Educated Decision**
+Based on the contextual clues, choose the most probable interpretation of the question.
+
+**Step 4: Determine the Final Answer**
+Based on your chosen interpretation, is the answer to the question "Yes" or "No"?
+
+**Step 5: Format the Final Output**
+Return a JSON object with your final answer and a brief explanation of your reasoning.
+
+**Example Analysis for Riddle Solution "A powerful fan":**
+
+- **User Question:** "Is the object's state, a solid?"
+- **Chain of Thought:**
+  1. **Potential Meanings:** "State" could mean physical state or operational state.
+  2. **Contextual Clues:** The user also said "a solid," which strongly points to physical state.
+  3. **Educated Decision:** The user is asking if the fan is a solid object.
+  4. **Final Answer:** A fan is a solid object, so the answer is "Yes".
+- **JSON Output:**
+  ```json
+  {{
+    "answer": "Yes",
+    "reasoning": "The user specified 'a solid,' indicating they are asking about the physical state of the object. A fan is a solid object."
+  }}
+  ```
+
+**Additional Examples:**
+
+**Example for "The man was hanged in a locked room":**
+- "Did he die inside the room?" → {{"answer": "Yes", "reasoning": "The solution states he was in a room when he died."}}
+- "Was there a rope?" → {{"answer": "Yes", "reasoning": "Hanging requires a rope, which is implied by the solution."}}
+
+**Example for "The 52 bicycles are a deck of playing cards":**
+- "Are the bicycles a deck of cards?" → {{"answer": "Yes", "reasoning": "The solution explicitly states the bicycles are a deck of cards."}}
+- "Are they actual bicycles?" → {{"answer": "No", "reasoning": "They are cards, not real bicycles."}}
+
+**Your Task:**
+Analyze the user's question now and return a JSON object with your answer and reasoning.
+
+**CRITICAL:** Return ONLY the JSON object, with no other text or formatting."""
+
+    try:
+        ai_result = await get_claude_response(riddle_prompt, temperature=0.3)
+        response_text = ai_result['responseText'].strip()
+        
+        # Clean up JSON formatting if wrapped in markdown
+        if response_text.startswith('```json'):
+            response_text = response_text.replace('```json', '').replace('```', '').strip()
+        elif response_text.startswith('```'):
+            response_text = response_text.replace('```', '').strip()
+        
+        # Parse the JSON response
+        try:
+            result = json.loads(response_text)
+            answer = result.get('answer', 'No')
+            reasoning = result.get('reasoning', '')
+            
+            # Log the reasoning for debugging
+            print(f"AI Question Analysis: {reasoning}")
+            
+            # Normalize the answer to ensure it's either Yes or No
+            if answer.lower() == 'yes':
+                return {"response": "Yes"}
+            else:
+                return {"response": "No"}
+                
+        except json.JSONDecodeError as e:
+            print(f"JSON parsing failed for riddle question: {e}")
+            print(f"Response text: {response_text}")
+            
+            # Fallback: try to extract Yes/No from the text
+            response_lower = response_text.lower()
+            if 'yes' in response_lower and 'no' not in response_lower:
+                return {"response": "Yes"}
+            else:
+                return {"response": "No"}
+            
+    except Exception as e:
+        print(f"Error in riddle question AI: {e}")
+        # Fallback to "No" if AI fails
+        return {"response": "No"}
+
+async def evaluate_riddle_solution_with_ai(user_answer: str, correct_solution: str) -> Dict[str, Any]:
+    """
+    Use AI to evaluate if a user's answer is semantically correct for a riddle.
+    This allows for synonyms, variations, and different phrasings of the same answer.
+    
+    Args:
+        user_answer: The user's proposed solution
+        correct_solution: The correct answer to the riddle
+    
+    Returns:
+        Dict with 'is_correct' boolean and 'reasoning' string
+    """
+    evaluation_prompt = f"""You are evaluating whether a user's answer to a riddle is correct.
+
+**Correct Answer:** "{correct_solution}"
+**User's Answer:** "{user_answer}"
+
+Your task is to determine if the user has correctly identified the answer, regardless of grammatical form (question vs statement).
+
+**CRITICAL EVALUATION PRINCIPLE:**
+The user is correct if they have identified the right answer, even if phrased as a question. Focus on WHAT they're identifying, not HOW they're asking.
+
+**Evaluation Guidelines:**
+- Accept ANY form that correctly identifies the answer: questions ("Is it a needle?"), statements ("a needle", "it's a needle"), or direct answers ("needle")
+- Accept synonyms and variations (e.g., "sewing needle", "knitting needle", "pine needle" are all types of needles)
+- Accept different articles (e.g., "a needle", "the needle", "needle")
+- Accept singular/plural variations if appropriate
+- Accept answers that specify a TYPE of the correct answer (e.g., if answer is "needle", accept "sewing needle")
+- The KEY is whether they've identified the correct concept/object, not the grammatical structure
+- Reject answers that are completely different concepts
+- Reject answers that are only tangentially related
+- Reject answers that are only PARTS of the correct answer
+
+**Examples for correct answer "A needle":**
+- "needle" → CORRECT (direct answer)
+- "a needle" → CORRECT (direct answer with article)
+- "Is it a needle?" → CORRECT (correctly identifies the answer as a question)
+- "Is it a sewing needle?" → CORRECT (correctly identifies a type of needle)
+- "sewing needle" → CORRECT (specific type of needle)
+- "knitting needle" → CORRECT (specific type of needle)
+- "pine needle" → CORRECT (specific type of needle)
+- "it's a needle" → CORRECT (statement form)
+- "I think it's a needle" → CORRECT (statement with qualifier)
+- "the eye of a needle" → INCORRECT (this is a PART of a needle, not the needle itself)
+- "Is it the eye of a needle?" → INCORRECT (asking about a part, not the whole)
+- "thread" → INCORRECT (related but different object)
+- "pin" → INCORRECT (similar but different object)
+
+**Critical:** Respond with ONLY valid JSON in this exact format:
+{{
+  "is_correct": true/false,
+  "reasoning": "Brief explanation of why this answer is correct or incorrect"
+}}"""
+
+    try:
+        ai_result = await get_claude_response(evaluation_prompt, temperature=0.2)
+        response_text = ai_result['responseText'].strip()
+        
+        # Clean up JSON formatting
+        if response_text.startswith('```json'):
+            response_text = response_text.replace('```json', '').replace('```', '').strip()
+        elif response_text.startswith('```'):
+            response_text = response_text.replace('```', '').strip()
+        
+        evaluation_result = json.loads(response_text)
+        
+        return {
+            "success": True,
+            "is_correct": evaluation_result.get("is_correct", False),
+            "reasoning": evaluation_result.get("reasoning", "Evaluation completed")
+        }
+        
+    except json.JSONDecodeError as e:
+        print(f"JSON parsing failed for riddle solution evaluation: {e}")
+        print(f"Response text: {response_text if 'response_text' in locals() else 'No response'}")
+        
+        # Fallback: simple string matching
+        user_lower = user_answer.lower().strip()
+        correct_lower = correct_solution.lower().strip()
+        
+        is_match = (
+            user_lower == correct_lower or
+            user_lower == f"a {correct_lower}" or
+            user_lower == f"an {correct_lower}" or
+            user_lower == f"the {correct_lower}" or
+            f"a {user_lower}" == correct_lower or
+            f"an {user_lower}" == correct_lower or
+            f"the {user_lower}" == correct_lower or
+            correct_lower in user_lower  # Check if correct answer is contained in user answer
+        )
+        
+        return {
+            "success": False,
+            "is_correct": is_match,
+            "reasoning": "AI evaluation failed, using fallback string matching"
+        }
+        
+    except Exception as e:
+        print(f"Error in riddle solution evaluation: {e}")
+        
+        # Fallback: simple string matching
+        user_lower = user_answer.lower().strip()
+        correct_lower = correct_solution.lower().strip()
+        
+        is_match = (
+            user_lower == correct_lower or
+            user_lower == f"a {correct_lower}" or
+            user_lower == f"an {correct_lower}" or
+            user_lower == f"the {correct_lower}" or
+            f"a {user_lower}" == correct_lower or
+            f"an {user_lower}" == correct_lower or
+            f"the {user_lower}" == correct_lower or
+            correct_lower in user_lower
+        )
+        
+        return {
+            "success": False,
+            "is_correct": is_match,
+            "reasoning": "Evaluation service unavailable, using fallback"
+        }
+async def triage_classify_input(user_input: str, riddle_solution: str) -> Dict[str, Any]:
+    """
+    Stage 1: Triage AI - Classifies user input as QUESTION or SOLUTION
+    
+    Args:
+        user_input: The user's submission text
+        riddle_solution: The correct answer to the riddle
+        
+    Returns:
+        Dict with 'classification' (QUESTION/SOLUTION), 'confidence', and 'reasoning'
+    """
+    triage_prompt = f"""You are a triage classifier for a riddle game. Your ONLY job is to determine if the user's input is a QUESTION or a SOLUTION attempt.
+
+**Riddle Answer:** "{riddle_solution}"
+
+**User Input:** "{user_input}"
+
+**CRITICAL CLASSIFICATION RULES:**
+
+**RULE 1 - HIGHEST PRIORITY: "Is/Are X a/an Y?" = SOLUTION**
+If the user asks "Is X a Y?" or "Are X Y?" where Y is a SPECIFIC NOUN/THING/CONCEPT, this is ALWAYS a **SOLUTION** attempt.
+The user is proposing Y as the identity/answer and asking for confirmation.
+
+**Examples of SOLUTION:**
+- "Are the 52 bicycles a deck of cards?" → **SOLUTION** (proposing "deck of cards")
+- "Are the bicycles playing cards?" → **SOLUTION** (proposing "playing cards")
+- "Is it a needle?" → **SOLUTION** (proposing "needle")
+- "Is the man a prisoner?" → **SOLUTION** (proposing "prisoner")
+- "Are they cards?" → **SOLUTION** (proposing "cards")
+- "Is it ice?" → **SOLUTION** (proposing "ice")
+
+**RULE 2 - SECOND PRIORITY: Direct Statements = SOLUTION**
+If the input states an answer directly without a question mark, it is a **SOLUTION**.
+- "a needle" → **SOLUTION**
+- "I think it's a deck of cards" → **SOLUTION**
+- "The answer is ice" → **SOLUTION**
+
+**RULE 3 - LOWEST PRIORITY: Property Questions = QUESTION**
+ONLY if the input asks about properties/characteristics WITHOUT proposing a specific identity, it is a **QUESTION**.
+- "Are the bicycles made of metal?" → **QUESTION** (asking about material property)
+- "Is the man alive?" → **QUESTION** (asking about state)
+- "Does it have a point?" → **QUESTION** (asking about feature)
+- "Did he die inside?" → **QUESTION** (asking about location/circumstance)
+
+**KEY PRINCIPLE:**
+When the user asks "Is/Are [subject] [a/an] [noun]?", they are proposing that [noun] as the answer → SOLUTION
+When the user asks "Is/Are [subject] [adjective]?" or "Does [subject] [verb]?", they are asking about properties → QUESTION
+
+**CRITICAL:** Return ONLY valid JSON in this exact format:
+{{
+  "classification": "QUESTION" or "SOLUTION",
+  "confidence": 0.0 to 1.0,
+  "reasoning": "Brief explanation citing which rule was applied"
+}}"""
+
+    try:
+        ai_result = await get_claude_response(triage_prompt, temperature=0.1)
+        response_text = ai_result['responseText'].strip()
+        
+        # Clean up JSON formatting
+        if response_text.startswith('```json'):
+            response_text = response_text.replace('```json', '').replace('```', '').strip()
+        elif response_text.startswith('```'):
+            response_text = response_text.replace('```', '').strip()
+        
+        result = json.loads(response_text)
+        
+        return {
+            "success": True,
+            "classification": result.get("classification", "QUESTION").upper(),
+            "confidence": result.get("confidence", 0.5),
+            "reasoning": result.get("reasoning", "Classification completed")
+        }
+        
+    except json.JSONDecodeError as e:
+        print(f"Triage classification JSON error: {e}")
+        # Fallback: simple heuristic
+        question_indicators = ["is it", "does it", "can it", "has it", "are they", "do they", "?"]
+        is_question = any(indicator in user_input.lower() for indicator in question_indicators)
+        
+        return {
+            "success": False,
+            "classification": "QUESTION" if is_question else "SOLUTION",
+            "confidence": 0.3,
+            "reasoning": "Fallback heuristic classification"
+        }
+    except Exception as e:
+        print(f"Triage classification error: {e}")
+        return {
+            "success": False,
+            "classification": "QUESTION",
+            "confidence": 0.0,
+            "reasoning": f"Error: {str(e)}"
+        }
+
+async def semantic_match_component(user_input: str, solution_components: List[str], solution_context: List[str], solved_components: List[int]) -> Dict[str, Any]:
+    """
+    Stage 2: Semantic AI - Checks if user input matches any unsolved solution components
+    
+    Args:
+        user_input: The user's submission text
+        solution_components: List of solution component texts
+        solution_context: List of context keywords for semantic matching
+        solved_components: List of indices of already-solved components
+        
+    Returns:
+        Dict with 'matched', 'component_index', 'component_text', and 'reasoning'
+    """
+    # Filter out already-solved components
+    unsolved_components = [
+        (i, comp) for i, comp in enumerate(solution_components)
+        if i not in solved_components
+    ]
+    
+    if not unsolved_components:
+        return {
+            "success": True,
+            "matched": False,
+            "component_index": None,
+            "component_text": None,
+            "reasoning": "All components already solved"
+        }
+    
+    # Build the semantic matching prompt
+    components_text = "\n".join([f"{i}. {comp}" for i, comp in unsolved_components])
+    context_text = ", ".join(solution_context)
+    
+    semantic_prompt = f"""You are a semantic matcher for a riddle game. Your job is to determine if the user has discovered a KEY INSIGHT that matches one of the solution components.
+
+**User Input:** "{user_input}"
+
+**Solution Context Keywords:** {context_text}
+
+**Unsolved Solution Components:**
+{components_text}
+
+**CRITICAL MATCHING RULES:**
+
+**RULE 1: DIRECT MENTION REQUIRED**
+The user MUST directly mention or clearly reference the SPECIFIC CONCEPT in the component. Vague associations or tangential connections are NOT matches.
+
+**RULE 2: CONCEPT MUST ALIGN**
+The user's concept must SEMANTICALLY ALIGN with the component's concept. Similar-sounding but different concepts are NOT matches.
+
+**EXAMPLES OF CORRECT MATCHES:**
+
+Component: "The man stood on a block of ice"
+- "Did he stand on ice?" → MATCH (directly mentions ice)
+- "Was there ice?" → MATCH (directly mentions ice)
+- "Was it frozen water?" → MATCH (synonym for ice)
+- "Did he stand on something frozen?" → MATCH (describes ice)
+
+Component: "The ice melted"
+- "Did the ice melt?" → MATCH (directly mentions melting)
+- "Did it melt?" → MATCH (mentions melting in context)
+- "Did something melt?" → MATCH (mentions melting)
+
+**EXAMPLES OF INCORRECT MATCHES (DO NOT MATCH THESE):**
+
+Component: "The man stood on a block of ice"
+- "Did the man drown?" → NO MATCH (drowning ≠ standing on ice)
+- "Was there water?" → NO MATCH (water ≠ ice, different states)
+- "Did he fall?" → NO MATCH (falling ≠ standing on ice)
+
+Component: "The man is a vampire"
+- "Did he die?" → NO MATCH (dying ≠ being a vampire)
+- "Was he scared?" → NO MATCH (scared ≠ vampire)
+- "Did he see something?" → NO MATCH (seeing ≠ vampire)
+
+**KEY PRINCIPLE:**
+ONLY match if the user's input DIRECTLY references the SPECIFIC CONCEPT in the component. Be STRICT - false positives are worse than false negatives.
+
+**Your Task:**
+Determine if the user's input matches the KEY INSIGHT of ANY unsolved component.
+
+**CRITICAL:** Return ONLY valid JSON in this exact format:
+{{
+  "matched": true or false,
+  "component_index": index number or null,
+  "component_text": "matching component text" or null,
+  "reasoning": "Brief explanation of why this matches or doesn't match"
+}}
+
+If no match is found, set matched to false and component_index to null."""
+
+    try:
+        ai_result = await get_claude_response(semantic_prompt, temperature=0.2)
+        response_text = ai_result['responseText'].strip()
+        
+        # Clean up JSON formatting
+        if response_text.startswith('```json'):
+            response_text = response_text.replace('```json', '').replace('```', '').strip()
+        elif response_text.startswith('```'):
+            response_text = response_text.replace('```', '').strip()
+        
+        result = json.loads(response_text)
+        
+        return {
+            "success": True,
+            "matched": result.get("matched", False),
+            "component_index": result.get("component_index"),
+            "component_text": result.get("component_text"),
+            "reasoning": result.get("reasoning", "Semantic matching completed")
+        }
+        
+    except json.JSONDecodeError as e:
+        print(f"Semantic matching JSON error: {e}")
+        # Fallback: keyword matching
+        user_lower = user_input.lower()
+        for idx, comp in unsolved_components:
+            comp_words = set(comp.lower().split())
+            context_words = set(solution_context)
+            user_words = set(user_lower.split())
+            
+            # Check for word overlap
+            if len(comp_words & user_words) >= 2 or len(context_words & user_words) >= 2:
+                return {
+                    "success": False,
+                    "matched": True,
+                    "component_index": idx,
+                    "component_text": comp,
+                    "reasoning": "Fallback keyword matching"
+                }
+        
+        return {
+            "success": False,
+            "matched": False,
+            "component_index": None,
+            "component_text": None,
+            "reasoning": "No keyword matches found"
+        }
+    except Exception as e:
+        print(f"Semantic matching error: {e}")
+        return {
+            "success": False,
+            "matched": False,
+            "component_index": None,
+            "component_text": None,
+            "reasoning": f"Error: {str(e)}"
+        }
+
+async def verify_solution(user_input: str, riddle_solution: str, solution_components: List[str], solved_components: List[int]) -> Dict[str, Any]:
+    """
+    Stage 3: Verification AI - Verifies if the user has correctly identified the complete solution
+    
+    Args:
+        user_input: The user's submission text
+        riddle_solution: The correct complete answer
+        solution_components: List of all solution components
+        solved_components: List of indices of solved components
+        
+    Returns:
+        Dict with 'is_correct', 'all_components_solved', and 'reasoning'
+    """
+    all_solved = len(solved_components) == len(solution_components)
+    
+    # Build list of unsolved components for the prompt
+    unsolved_indices = [i for i in range(len(solution_components)) if i not in solved_components]
+    unsolved_components_text = "\n".join([f"- Component {i}: {solution_components[i]}" for i in unsolved_indices])
+    
+    verification_prompt = f"""You are a solution verifier for a lateral thinking puzzle game. Determine if the user has provided a COMPLETE SOLUTION that explains the entire puzzle scenario.
+
+**Complete Correct Solution:** "{riddle_solution}"
+
+**User Input:** "{user_input}"
+
+**Solution Progress:**
+- Total Components: {len(solution_components)}
+- Solved Components: {len(solved_components)}
+- All Components Solved: {all_solved}
+
+**UNSOLVED COMPONENTS:**
+{unsolved_components_text if unsolved_components_text else "All components have been solved!"}
+
+**CRITICAL VERIFICATION RULES:**
+
+1. **QUESTIONS ARE NEVER COMPLETE SOLUTIONS:**
+   - If the user's input ends with "?" or is phrased as a question, it is NEVER a complete solution
+   - Questions like "Was the coin preventing a worse health issue?" are correct statements but NOT complete solutions
+   - Even if a question correctly identifies a key insight, it's not the full explanation
+   - ALWAYS return is_correct: false for questions
+
+2. **COMPLETE SOLUTIONS MUST:**
+   - Be statements (not questions) that EXPLAIN the entire scenario
+   - Provide the full context and reasoning, not just identify one aspect
+   - Match the depth and completeness of the correct solution
+   - Include the key elements that make the puzzle make sense
+
+3. **EXAMPLES OF WHAT IS NOT A COMPLETE SOLUTION:**
+   - "Was the coin preventing a worse health issue?" → INCORRECT (question, not explanation)
+   - "Is it about a toxic coin?" → INCORRECT (question, not explanation)
+   - "The coin was toxic" → INCORRECT (partial, doesn't explain the full scenario)
+   - "Did the doctor need to remove it?" → INCORRECT (question)
+
+4. **EXAMPLES OF COMPLETE SOLUTIONS:**
+   - "The woman swallowed a rare toxic coin that would poison her if left in her stomach, so the doctor removed and replaced it to induce vomiting and expel the toxins" → CORRECT (full explanation)
+   - "It's a needle" (for a simple riddle about a needle) → CORRECT (complete answer for simple riddle)
+
+**CRITICAL:** Return ONLY valid JSON in this exact format:
+{{
+  "is_correct": true or false,
+  "reasoning": "Brief explanation focusing on whether this is a complete solution or just a question/partial insight"
+}}"""
+
+    try:
+        ai_result = await get_claude_response(verification_prompt, temperature=0.1)
+        response_text = ai_result['responseText'].strip()
+        
+        # Clean up JSON formatting
+        if response_text.startswith('```json'):
+            response_text = response_text.replace('```json', '').replace('```', '').strip()
+        elif response_text.startswith('```'):
+            response_text = response_text.replace('```', '').strip()
+        
+        result = json.loads(response_text)
+        
+        return {
+            "success": True,
+            "is_correct": result.get("is_correct", False),
+            "all_components_solved": all_solved,
+            "reasoning": result.get("reasoning", "Verification completed")
+        }
+        
+    except json.JSONDecodeError as e:
+        print(f"Solution verification JSON error: {e}")
+        # Fallback: simple string matching
+        user_lower = user_input.lower().strip()
+        solution_lower = riddle_solution.lower().strip()
+        
+        is_match = (
+            solution_lower in user_lower or
+            user_lower in solution_lower or
+            user_lower.replace("is it ", "").replace("?", "").strip() == solution_lower
+        )
+        
+        return {
+            "success": False,
+            "is_correct": is_match,
+            "all_components_solved": all_solved,
+            "reasoning": "Fallback string matching"
+        }
+    except Exception as e:
+        print(f"Solution verification error: {e}")
+        return {
+            "success": False,
+            "is_correct": False,
+            "all_components_solved": all_solved,
+            "reasoning": f"Error: {str(e)}"
+        }
+async def analyze_puzzle_submission(
+    user_input: str,
+    puzzle_solution: str,
+    solution_components: List[str],
+    solution_context: List[str],
+    solved_components: List[int],
+    conversation_history: Optional[List[Dict[str, str]]] = None
+) -> Dict[str, Any]:
+    """
+    Phase 2: Single, powerful AI call to analyze puzzle submissions.
+    
+    This function replaces the rigid multi-step logic with a context-aware AI analysis
+    that provides nuanced, intelligent responses based on the full puzzle context.
+    
+    Args:
+        user_input: The user's submission text
+        puzzle_solution: The complete correct solution
+        solution_components: List of solution component texts
+        solution_context: List of context keywords for semantic matching
+        solved_components: List of indices of already-solved components
+        conversation_history: Optional list of previous Q&A exchanges
+        
+    Returns:
+        Dict with response type, message, and any discovered components
+    """
+    
+    # Build conversation history context if available
+    history_text = ""
+    if conversation_history and len(conversation_history) > 0:
+        history_items = []
+        for item in conversation_history[-10:]:  # Last 10 exchanges
+            role = item.get("role", "")
+            text = item.get("text", "")
+            if role and text:
+                history_items.append(f"{role}: {text}")
+        if history_items:
+            history_text = "\n".join(history_items)
+    
+    # Build unsolved components list
+    unsolved_components = [
+        (i, comp) for i, comp in enumerate(solution_components)
+        if i not in solved_components
+    ]
+    
+    unsolved_text = ""
+    if unsolved_components:
+        unsolved_text = "\n".join([f"Component {i}: {comp}" for i, comp in unsolved_components])
+    
+    # Build solved components summary
+    solved_text = f"{len(solved_components)}/{len(solution_components)} components discovered"
+    
+    analysis_prompt = f"""You are an intelligent puzzle game assistant analyzing a user's submission for a lateral thinking puzzle.
+
+**PUZZLE CONTEXT:**
+- **Complete Solution:** "{puzzle_solution}"
+- **Solution Keywords:** {', '.join(solution_context)}
+- **Progress:** {solved_text}
+
+**UNSOLVED COMPONENTS:**
+{unsolved_text if unsolved_text else "All components have been discovered!"}
+
+**USER'S SUBMISSION:** "{user_input}"
+
+**CONVERSATION HISTORY:**
+{history_text if history_text else "No previous conversation."}
+
+**YOUR TASK:**
+Analyze the user's submission holistically and provide an intelligent, context-aware response. Consider:
+
+1. **Component Discovery:** Does the submission reveal a key insight matching an unsolved component?
+2. **Correctness:** Is the submission a correct statement/question about the puzzle?
+3. **Complete Solution:** Does the submission provide the full, correct explanation?
+
+**RESPONSE GUIDELINES:**
+
+**If the submission matches an UNSOLVED COMPONENT:**
+- Return type: "component_discovered"
+- Respond with "Yes"
+
+**If the submission is the COMPLETE CORRECT SOLUTION:**
+- Return type: "solution_correct"
+- Respond with "Correct"
+
+**If the submission is a CORRECT statement/question (but not complete solution):**
+- Return type: "statement_correct"
+- Respond with "Yes"
+
+**If the submission is INCORRECT:**
+- Return type: "statement_incorrect"
+- Respond with "No" for questions, "Incorrect" for statements
+
+**CRITICAL RULES:**
+- Questions (ending with "?") are NEVER complete solutions, even if correct
+- Do NOT provide any conversational feedback or hints.
+- Your response message must be one of the following: "Yes", "No", "Correct", "Incorrect".
+
+**Return ONLY valid JSON in this exact format:**
+{{
+  "response_type": "component_discovered" | "solution_correct" | "statement_correct" | "statement_incorrect",
+  "message": "Yes" | "No" | "Correct" | "Incorrect",
+  "component_index": null or number (only for component_discovered),
+  "component_text": null or "text" (only for component_discovered),
+  "reasoning": "Brief explanation of your analysis"
+}}"""
+
+    try:
+        ai_result = await get_claude_response(analysis_prompt, temperature=0.3)
+        response_text = ai_result['responseText'].strip()
+        
+        # Clean up JSON formatting
+        if response_text.startswith('```json'):
+            response_text = response_text.replace('```json', '').replace('```', '').strip()
+        elif response_text.startswith('```'):
+            response_text = response_text.replace('```', '').strip()
+        
+        result = json.loads(response_text)
+        
+        return {
+            "success": True,
+            "response_type": result.get("response_type", "statement_incorrect"),
+            "message": result.get("message", "No"),
+            "component_index": result.get("component_index"),
+            "component_text": result.get("component_text"),
+            "reasoning": result.get("reasoning", "Analysis completed")
+        }
+        
+    except json.JSONDecodeError as e:
+        print(f"JSON parsing failed for puzzle submission analysis: {e}")
+        print(f"Response text: {response_text if 'response_text' in locals() else 'No response'}")
+        
+        # Fallback: Use the old multi-step approach
+        print("Falling back to multi-step analysis")
+        
+        # Check for component discovery
+        semantic_result = await semantic_match_component(
+            user_input,
+            solution_components,
+            solution_context,
+            solved_components
+        )
+        
+        if semantic_result.get("matched", False):
+            return {
+                "success": False,
+                "response_type": "component_discovered",
+                "message": "You discovered a clue!",
+                "component_index": semantic_result.get("component_index"),
+                "component_text": semantic_result.get("component_text"),
+                "reasoning": "Fallback component matching"
+            }
+        
+        # Check correctness
+        correctness_result = await get_riddle_question_response(
+            question=user_input,
+            riddle_solution=puzzle_solution
+        )
+        
+        is_correct = correctness_result["response"] == "Yes"
+        
+        # Check if complete solution
+        verification_result = await verify_solution(
+            user_input,
+            puzzle_solution,
+            solution_components,
+            solved_components
+        )
+        
+        if verification_result.get("is_correct", False):
+            return {
+                "success": False,
+                "response_type": "solution_correct",
+                "message": "Correct!",
+                "component_index": None,
+                "component_text": None,
+                "reasoning": "Fallback solution verification"
+            }
+        elif is_correct:
+            return {
+                "success": False,
+                "response_type": "statement_correct",
+                "message": "Yes" if user_input.strip().endswith("?") else "That's correct",
+                "component_index": None,
+                "component_text": None,
+                "reasoning": "Fallback correctness check"
+            }
+        else:
+            return {
+                "success": False,
+                "response_type": "statement_incorrect",
+                "message": "No" if user_input.strip().endswith("?") else "Incorrect",
+                "component_index": None,
+                "component_text": None,
+                "reasoning": "Fallback incorrectness"
+            }
+            
+    except Exception as e:
+        print(f"Error in puzzle submission analysis: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Return safe fallback
+        return {
+            "success": False,
+            "response_type": "statement_incorrect",
+            "message": "No" if user_input.strip().endswith("?") else "Incorrect",
+            "component_index": None,
+            "component_text": None,
+            "reasoning": f"Error: {str(e)}"
+        }

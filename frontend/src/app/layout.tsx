@@ -1,19 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { DM_Sans } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "../components/ThemeProvider";
 import ThemeSwitcher from "../components/ThemeSwitcher";
 import { AuthProvider } from "../contexts/AuthContext";
+import { SessionProvider } from "../contexts/SessionContext";
+import { AnalyticsProvider } from "../contexts/AnalyticsContext";
 import Navigation from "@/components/Navigation";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const dmSans = DM_Sans({
+  variable: "--font-dm-sans",
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: ["400", "700"],
 });
 
 export const metadata: Metadata = {
@@ -43,11 +41,15 @@ export default function RootLayout({
         <meta property="og:description" content="Mind Matters" />
         <meta property="og:image" content="/og-image.png" />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body className={dmSans.variable}>
         <AuthProvider>
           <ThemeProvider>
-            <Navigation />
-            {children}
+            <AnalyticsProvider>
+              <SessionProvider>
+                <Navigation />
+                {children}
+              </SessionProvider>
+            </AnalyticsProvider>
           </ThemeProvider>
         </AuthProvider>
       </body>

@@ -121,7 +121,7 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
   const fetchUsage = async () => {
     if (!sessionId) return;
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ai/usage/${sessionId}`, {
+      const response = await fetch(`/api/ai/usage/${sessionId}`, {
         credentials: 'include'
       });
       if (response.ok) {
@@ -178,8 +178,17 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
       return;
     }
 
-    // Always make a fresh API call to ensure users get the latest AI behavior
-    // This ensures that backend prompt improvements are immediately visible
+    // Implement sessionStorage caching
+    const cacheKey = `ai-response-${stage}-${JSON.stringify(context)}`;
+    const cachedResponse = sessionStorage.getItem(cacheKey);
+
+    if (cachedResponse) {
+      const data = JSON.parse(cachedResponse);
+      setResponses(prev => ({ ...prev, [stage]: data }));
+      setActiveStage(stage);
+      console.log("Serving AI response from cache:", cacheKey);
+      return;
+    }
 
     setLoadingStage(stage);
     setLastAttemptedStage(stage);
@@ -203,14 +212,13 @@ export const AIAssistantProvider: React.FC<AIAssistantProviderProps> = ({
 
       const data = await response.json();
       if (response.ok) {
-        setResponses(prev => ({
-          ...prev,
-          [stage]: {
-            response: data.response,
-            interactionId: data.interactionId,
-            userInput: context // Store the context instead of userInput for better comparison
-          }
-        }));
+        const newResponse = {
+          response: data.response,
+          interactionId: data.interactionId,
+          userInput: context
+        };
+        setResponses(prev => ({ ...prev, [stage]: newResponse }));
+        sessionStorage.setItem(cacheKey, JSON.stringify(newResponse));
         setActiveStage(stage);
         setUsage(data.usage);
         

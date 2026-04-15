@@ -13,7 +13,7 @@
   min-height: 100svh;
   padding: 80px;
   gap: 64px;
-  font-family: var(--font-geist-sans);
+  font-family: var(--font-dm-sans), sans-serif;
 }
 
 [data-theme='dark'] .page {
@@ -33,7 +33,7 @@
 }
 
 .main ol {
-  font-family: var(--font-geist-mono);
+  font-family: monospace;
   padding-left: 0;
   margin: 0;
   font-size: 14px;
@@ -60,6 +60,8 @@
 }
 
 .ctas a {
+  -webkit-appearance: none;
+  -moz-appearance: none;
   appearance: none;
   border-radius: 128px;
   height: 48px;
@@ -160,5 +162,6 @@ a.secondary {
 }
 
 [data-theme='dark'] .logo {
+  -webkit-filter: invert();
   filter: invert();
 }
