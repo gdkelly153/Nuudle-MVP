@@ -45,7 +45,7 @@ export default function SessionSummaryPage() {
 
   const fetchSessionData = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/sessions/${sessionId}`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sessions/${sessionId}`);
       if (response.ok) {
         const data = await response.json();
         setSessionData(data);
