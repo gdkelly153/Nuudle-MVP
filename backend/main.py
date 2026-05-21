@@ -1338,7 +1338,22 @@ async def process_riddle_submission(session_id: str, request: RiddleSubmissionRe
         )
         
         is_correct = verification_result.get("is_correct", False)
-        
+
+        # Fallback: direct match catches simple one-word answers the strict
+        # verifier rejects for lacking a full explanation.
+        if not is_correct:
+            normalized_sub = submission_text.lower().strip().rstrip("?.!")
+            for prefix in ("is it ", "it's ", "it is ", "the answer is ", "a ", "an ", "the "):
+                if normalized_sub.startswith(prefix):
+                    normalized_sub = normalized_sub[len(prefix):].strip()
+            normalized_sol = solution.lower().strip()
+            for prefix in ("a ", "an ", "the "):
+                if normalized_sol.startswith(prefix):
+                    normalized_sol = normalized_sol[len(prefix):].strip()
+            if normalized_sub and normalized_sub == normalized_sol:
+                is_correct = True
+                print(f"  [FALLBACK MATCH]: Direct solution match after normalization")
+
         print(f"  Is Correct: {is_correct}")
         print(f"  Reasoning: {verification_result.get('reasoning', '')}")
         

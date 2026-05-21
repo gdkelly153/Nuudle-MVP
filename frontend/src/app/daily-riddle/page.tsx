@@ -629,7 +629,7 @@ const DailyRiddlePage: React.FC = () => {
               style={{
                 marginTop: '1rem',
                 padding: '0.5rem 1rem',
-                backgroundColor: '#C85A54',
+                backgroundColor: '#41ADB0',
                 color: 'white',
                 border: 'none',
                 borderRadius: '4px',
