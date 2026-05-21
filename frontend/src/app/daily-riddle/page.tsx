@@ -637,7 +637,7 @@ const DailyRiddlePage: React.FC = () => {
                 opacity: regenerating ? 0.6 : 1
               }}
             >
-              {regenerating ? 'Generating...' : '🔄 Generate New Riddle (Testing)'}
+              {regenerating ? 'Generating...' : '🔄 Generate New Riddle'}
             </button>
           </div>
         </>
