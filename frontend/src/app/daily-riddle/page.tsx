@@ -24,6 +24,7 @@ interface Stats {
   streak: number;
   riddlesSolved: number;
   totalQuestions: number;
+  lastSolvedDate?: string; // YYYY-MM-DD
 }
 
 const DailyRiddlePage: React.FC = () => {
@@ -333,10 +334,21 @@ const DailyRiddlePage: React.FC = () => {
           trackEvent('session_start', { session_type: 'daily-riddle', sessionId: sessionData.id });
         }
         
-        // Load stats from localStorage
+        // Load stats from localStorage, resetting streak if no riddle was solved yesterday or today
         const savedStats = localStorage.getItem('riddleStats');
         if (savedStats) {
-          setStats(JSON.parse(savedStats));
+          const parsed: Stats = JSON.parse(savedStats);
+          const today = new Date();
+          const todayStr = today.toISOString().split('T')[0];
+          const yesterday = new Date(today);
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yesterdayStr = yesterday.toISOString().split('T')[0];
+          const isStreakAlive = parsed.lastSolvedDate === todayStr || parsed.lastSolvedDate === yesterdayStr;
+          if (!isStreakAlive) {
+            parsed.streak = 0;
+            localStorage.setItem('riddleStats', JSON.stringify(parsed));
+          }
+          setStats(parsed);
         }
       } catch (err) {
         if (err instanceof Error) {
@@ -464,12 +476,20 @@ const DailyRiddlePage: React.FC = () => {
         }
         
         // Update stats with attempt count
-        const newTotalQuestions = stats.totalQuestions + attemptCount;
-        const newRiddlesSolved = stats.riddlesSolved + 1;
+        const todaySolveDate = riddle?.date ?? new Date().toISOString().split('T')[0];
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        const isNewDay = stats.lastSolvedDate !== todaySolveDate;
+        const streakContinues = stats.lastSolvedDate === yesterdayStr || stats.lastSolvedDate === todaySolveDate;
+        const newStreak = isNewDay ? (streakContinues ? stats.streak + 1 : 1) : stats.streak;
+        const newTotalQuestions = isNewDay ? stats.totalQuestions + attemptCount : stats.totalQuestions;
+        const newRiddlesSolved = isNewDay ? stats.riddlesSolved + 1 : stats.riddlesSolved;
         const newStats: Stats = {
-          streak: stats.streak + 1,
+          streak: newStreak,
           riddlesSolved: newRiddlesSolved,
-          totalQuestions: newTotalQuestions
+          totalQuestions: newTotalQuestions,
+          lastSolvedDate: todaySolveDate,
         };
         setStats(newStats);
         localStorage.setItem('riddleStats', JSON.stringify(newStats));
